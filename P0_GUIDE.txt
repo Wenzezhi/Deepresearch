@@ -1,0 +1,75 @@
+P0 功能与运行说明
+
+已实现：
+1. 首页模型下拉选择及右侧模型配置面板。支持兼容 OpenAI 聊天接口的服务。
+   可新增、编辑、删除、测试连接；编辑时 API Key 留空保留原密钥。
+   启动时仅首次导入 backend/.env；之后以模型管理中保存的配置为准。
+   开始研究时固定所选配置，后续编辑或删除配置不改变运行中的研究。
+2. 首页与研究页共用历史列表，支持搜索、打开、重命名和确认删除。
+   新版本发起的研究保存到 backend/data/research.sqlite3。
+   旧 notes 文件保留原位；本次没有将旧笔记推断成完整研究历史。
+   页面切换、刷新或关闭不取消后台研究，前提是后端进程继续运行。
+   后端重启后，未完成研究标为中断；已保存内容保留，不会自动重跑。
+   运行中的记录不能删除；删除历史不删除独立的 notes 文件。
+3. 研究页左侧在原进度区域下方显示总耗时、规划、并发执行和报告耗时。
+   展开各子任务耗时可查看搜索和总结时间。计时由后端单调时钟采集。
+   并发执行阶段是实际经过时间，不是各任务耗时相加。
+   完成、失败时冻结计时；中断时保留最后保存的时间，未执行阶段显示横线。
+   不展示 Token 用量、费用或余额。模型配置中的最大输出长度是调用参数。
+
+前后端联通：
+- GET/POST /model-profiles；PUT/DELETE /model-profiles/{id}；POST /model-profiles/{id}/test
+- POST /research-runs：固定配置后启动后台研究，返回研究 ID
+- GET /research-runs：历史列表；GET /research-runs/{id}?after=N：增量进度与计时
+- PATCH/DELETE /research-runs/{id}：改名与删除
+- 前端每秒读取已保存的新增事件，复用原有详情展示逻辑。
+- 旧 /research 和 /research/stream 接口保留兼容；完整历史请通过新首页发起。
+
+文件：
+- backend/data/ 仅存于本机，包含密钥配置，请勿分享或提交；已加入 .gitignore。
+- 每次新研究的笔记分开保存到 backend/notes/{research_id}/。
+- 旧源文件备份在 .runtime/p0-before/。
+
+启动：双击 start-local.cmd；停止：双击 stop-local.cmd。
+页面：http://127.0.0.1:5174/
+后端：http://127.0.0.1:8000/healthz
+
+验证：
+backend\.venv\Scripts\python.exe -m unittest discover -s backend\tests -q
+npm --prefix frontend run build
+隔离浏览器测试和截图位于 .runtime/p0-*。
+真实模型/Tavily 端到端验收结果位于 .runtime/p0-live-validation.json。
+
+本次验收结果：33 项后端自动化测试通过，前端构建通过。
+浏览器验证：模型配置增删与请求路由、运行中切页、刷新恢复、历史改名删除、完成/失败计时冻结、768/900 高度侧栏按钮可见。
+真实模型与 Tavily 验收：完成 1 个子任务，报告 937 字符，总耗时约 38.5 秒；服务重启后报告与计时仍保留。
+
+2026-10-31 UI 调整验收：
+1. 首页：三栏同高、各自滚动；中央欢迎区和底部研究输入区。
+   浏览器实测 1600x1000、1280x900、1280x768，三栏高度分别为 952、852、720 像素。
+2. 模型配置：已有配置点击修改后编辑；新增直接编辑；删除弹窗红色确认/绿色取消。
+   临时配置真实 API 增改删验证通过；取消删除保留数据；空密钥编辑保留原密钥。测试配置已清理。
+3. 详情：子任务标题/工具调用记录双 Tab，任务总结与最终报告渲染 Markdown；右上角复制完整纯文本。
+   验证标题、列表、表格、代码块、危险 HTML 过滤、剪贴板成功/失败反馈、Tab 键盘切换和空工具记录。
+4. 真实后端健康检查、现有历史读取、工具记录、返回首页、刷新恢复及增量 Markdown 渲染均通过。
+5. TypeScript 检查与 Vite 生产构建通过；浏览器无未捕获 JS 错误。
+本批验证没有额外调用付费模型或搜索服务。
+复验脚本：.runtime/ui-refine-verify.cjs、.runtime/ui-live-verify.cjs（需本机 Playwright/Edge）。
+截图：.runtime/ui-final-home.png、.runtime/ui-final-real-detail.png、.runtime/ui-final-real-tools.png。
+
+2026-10-31 第二批详情页调整：
+- 所有子任务按原顺序展示顶部 Tab，与任务清单同步；支持方向键/Home/End，长标题可横向滚动。
+- 所有任务进入结束状态且有可用报告后，才出现首位“最终报告”Tab，并自动选中一次；之后轮询不会打断手动切换。
+- 切换任务或报告时正文回到顶部；任务内仍有分析内容/工具调用记录切换。
+- 总结服务使用 Agent 的最终轮返回值，避免 stream_run 把工具轮次说明拼入正文。生成期间只显示状态，结束后展示正式总结。
+- 新总结/报告提取 final_answer 正文，过滤思考标签；旧历史仅在展示时提取最后的正式总结，不改写历史原始数据。
+- 工具记录保留名称、动作、笔记标识等元数据，隐藏笔记正文和 reasoning 字段；复制只含展示的正式正文。
+- 任务清单浅蓝背景与正文栏铺满剩余视口高度，各自滚动；顶部 Tab 固定可见。
+验收：41 项后端测试通过；TypeScript 与 Vite 构建通过；三尺寸布局、动态报告出现时序、双入口同步、复制与旧历史五个子任务均通过。
+后端已在确认没有活动研究后重载；健康检查、历史与首页布局检查通过。未额外调用付费模型或搜索服务。
+复验脚本（按顺序单独运行，避免多个 Edge 实例争用渲染资源）：
+.runtime/ui-tabs-verify.cjs
+.runtime/ui-public-answer-verify.cjs
+.runtime/ui-v2-layout-verify.cjs
+.runtime/ui-v2-final-smoke.cjs
+截图：.runtime/ui-v2-final-real-report.png、.runtime/ui-v2-final-real-task.png、.runtime/ui-v2-final-real-scrolled.png。

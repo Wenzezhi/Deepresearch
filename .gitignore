@@ -1,0 +1,25 @@
+# Credentials and machine-specific settings
+.env
+.env.*
+!.env.example
+!.env.*.example
+# Local data (share only the sanitized shared-data snapshot)
+backend/data/
+backend/notes/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+.runtime/
+*.log
+# Dependencies and generated artifacts
+.venv/
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
+Thumbs.db

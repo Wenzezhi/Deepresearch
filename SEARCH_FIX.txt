@@ -1,0 +1,33 @@
+﻿搜索修复说明
+
+已验证的失败原因：DuckDuckGo HTML 搜索对 Python 和原研究查询返回 HTTP 202，页面包含机器人验证标记。旧版搜索库将其汇总为 No results found，不能据此认定主题没有资料。
+
+搜索行为：
+- 每个服务默认最多尝试 2 次，失败间隔 0.5 秒；配置允许 1-3 次。
+- 鉴权失败、配置错误等不会重复请求。
+- 正常结构化响应 results=[] 为无结果，任务跳过。
+- 搜索异常、非结构化错误响应不会冒充无结果。
+- DuckDuckGo 的 No results found 异常保留为服务失败，并提示可能的验证拦截。
+- 只有 SEARCH_FALLBACK_APIS 明确列出的服务且相关凭证/地址已配置，才尝试备用搜索。
+- 本次不启用备用搜索，用户尚无 Tavily Key。
+
+本地 backend/.env 可选设置（示例不含密钥）：
+SEARCH_MAX_ATTEMPTS=2
+SEARCH_RETRY_DELAY=0.5
+SEARCH_FALLBACK_APIS=tavily
+TAVILY_API_KEY=在本地填写真实值
+保存后停止并重新启动服务。仅填写 Key 而不设置 SEARCH_FALLBACK_APIS 不会启用自动回退。
+
+前后端行为：
+- 失败事件携带具体原因，并同步内部任务状态。
+- 任务卡显示“失败”或“无搜索结果”，系统提示和流程日志显示原因。
+- 所有任务失败/跳过时停止报告生成。
+- 部分成功时仍可汇总，报告上下文包含失败任务及原因。
+- 修正同步 /research 路径未消费任务生成器导致搜索未执行的问题。
+
+验证：14 项无网络、无模型费用的回归测试；前端类型检查与构建；真实 DuckDuckGo 失败路径验证。
+测试命令（项目根目录）：
+.\backend\.venv\Scripts\python.exe -X utf8 -m unittest discover -s backend/tests -v
+npm.cmd --prefix frontend run build
+
+任务规划输出解析问题不在本次搜索修复范围内，仍需另行处理。

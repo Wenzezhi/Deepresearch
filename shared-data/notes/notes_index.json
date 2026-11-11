@@ -1,0 +1,208 @@
+{
+  "notes": [
+    {
+      "id": "note_20261011_194903_0",
+      "title": "研究报告：探索多模态模型在2025年的关键突破",
+      "type": "conclusion",
+      "tags": [
+        "deep_research",
+        "report"
+      ],
+      "created_at": "2026-10-11T19:49:03.977502"
+    },
+    {
+      "id": "note_20261011_195251_1",
+      "title": "研究报告：探索多模态模型在2025年的关键突破",
+      "type": "conclusion",
+      "tags": [
+        "deep_research",
+        "report"
+      ],
+      "created_at": "2026-10-11T19:52:51.841261"
+    },
+    {
+      "id": "note_20261011_201637_2",
+      "title": "研究报告：探索多模态模型在2025年的关键突破",
+      "type": "conclusion",
+      "tags": [
+        "deep_research",
+        "report"
+      ],
+      "created_at": "2026-10-11T20:16:37.884861"
+    },
+    {
+      "id": "note_20261011_202535_3",
+      "title": "任务 1: 架构范式突破",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_1"
+      ],
+      "created_at": "2026-10-11T20:25:35.011742"
+    },
+    {
+      "id": "note_20261011_202535_4",
+      "title": "任务 2: 旗舰模型盘点",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_2"
+      ],
+      "created_at": "2026-10-11T20:25:35.016614"
+    },
+    {
+      "id": "note_20261011_202535_5",
+      "title": "任务 3: 评测基准进展",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_3"
+      ],
+      "created_at": "2026-10-11T20:25:35.020017"
+    },
+    {
+      "id": "note_20261011_202535_6",
+      "title": "任务 4: 落地与产品化",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_4"
+      ],
+      "created_at": "2026-10-11T20:25:35.025771"
+    },
+    {
+      "id": "note_20261011_202535_7",
+      "title": "任务 5: 局限与风险",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_5"
+      ],
+      "created_at": "2026-10-11T20:25:35.028307"
+    },
+    {
+      "id": "note_20261011_202723_8",
+      "title": "研究报告：探索多模态模型在2025年的关键突破",
+      "type": "conclusion",
+      "tags": [
+        "deep_research",
+        "report"
+      ],
+      "created_at": "2026-10-11T20:27:23.359134"
+    },
+    {
+      "id": "note_20261011_210732_9",
+      "title": "任务 1: 原生架构突破",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_1"
+      ],
+      "created_at": "2026-10-11T21:07:32.741969"
+    },
+    {
+      "id": "note_20261011_210732_10",
+      "title": "任务 2: 评测基准演进",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_2"
+      ],
+      "created_at": "2026-10-11T21:07:32.752013"
+    },
+    {
+      "id": "note_20261011_210732_11",
+      "title": "任务 3: 视频时序理解",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_3"
+      ],
+      "created_at": "2026-10-11T21:07:32.759015"
+    },
+    {
+      "id": "note_20261011_210732_12",
+      "title": "任务 4: 多模态智能体",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_4"
+      ],
+      "created_at": "2026-10-11T21:07:32.761012"
+    },
+    {
+      "id": "note_20261011_210732_13",
+      "title": "任务 5: 开源与落地",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_5"
+      ],
+      "created_at": "2026-10-11T21:07:32.766039"
+    },
+    {
+      "id": "note_20261011_211023_14",
+      "title": "研究报告：探索多模态大模型在2025年的关键突破",
+      "type": "conclusion",
+      "tags": [
+        "deep_research",
+        "report"
+      ],
+      "created_at": "2026-10-11T21:10:23.251597"
+    },
+    {
+      "id": "note_20261011_211458_15",
+      "title": "任务 1: 前沿模型架构",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_1"
+      ],
+      "created_at": "2026-10-11T21:14:58.385287"
+    },
+    {
+      "id": "note_20261011_211458_16",
+      "title": "任务 2: 基准与评测",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_2"
+      ],
+      "created_at": "2026-10-11T21:14:58.390703"
+    },
+    {
+      "id": "note_20261011_211458_17",
+      "title": "任务 3: 训练与后训练",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_3"
+      ],
+      "created_at": "2026-10-11T21:14:58.393698"
+    },
+    {
+      "id": "note_20261011_211458_18",
+      "title": "任务 4: 系统与落地",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_4"
+      ],
+      "created_at": "2026-10-11T21:14:58.398241"
+    },
+    {
+      "id": "note_20261011_211458_19",
+      "title": "任务 5: 挑战与趋势",
+      "type": "task_state",
+      "tags": [
+        "deep_research",
+        "task_5"
+      ],
+      "created_at": "2026-10-11T21:14:58.402946"
+    }
+  ],
+  "metadata": {
+    "created_at": "2026-10-11T19:25:08.658452",
+    "total_notes": 20
+  }
+}

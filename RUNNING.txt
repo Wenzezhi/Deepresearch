@@ -1,0 +1,4 @@
+共享版的最新安装和启动步骤请阅读根目录 README.md。
+先安装 Python/Node 依赖，复制 .env.example，导入 shared-data，再启动。
+导入的模型配置不含 API Key，需要在首页模型配置中自行填写。
+不要复制原电脑的 .venv、node_modules 或原始数据库。

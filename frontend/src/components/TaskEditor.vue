@@ -1,0 +1,17 @@
+<template>
+<section class="task-editor"><div class="editor-head"><h3>任务清单</h3><button aria-label="保存任务修改" title="保存并更新报告" :disabled="busy" @click="save"><UiIcon name="check"/></button><button :disabled="busy" @click="$emit('cancel')">取消</button></div><p class="hint">拖动调整顺序；模型根据研究要求判断搜索内容。</p>
+<div v-for="(task,index) in draft" :key="task.key" class="edit-task" @dragover.prevent @drop.prevent="drop(index)"><div class="task-row"><button draggable="true" class="drag" aria-label="拖动任务" @dragstart="dragged=index">☰</button><strong>{{ task.title || '新增任务' }}</strong><button @click="opened=task.key">编辑</button><button class="danger" @click="removeIndex=index;confirmDelete?.showModal()">删除</button></div><div v-if="opened===task.key" class="fields"><label>任务标题<input v-model="task.title" maxlength="160" /></label><label>研究要求<textarea v-model="task.intent" rows="4" maxlength="4000" placeholder="用一段话描述你希望研究的内容" /></label></div><p v-else>{{ task.intent }}</p></div>
+<button class="add" @click="add">＋ 新增任务</button><p v-if="error" role="alert" class="danger">{{ error }}</p>
+<dialog ref="confirmDelete"><h3>确定删除这个任务？</h3><p>保存后将排除此任务并重新生成报告。</p><button class="keep" @click="confirmDelete?.close()">否，保留</button><button class="delete" @click="draft.splice(removeIndex,1);confirmDelete?.close()">是，删除</button></dialog></section>
+</template>
+<script setup lang="ts">
+import {ref} from 'vue';import UiIcon from './UiIcon.vue';
+const props=defineProps<{tasks:{id:number;title:string;intent:string}[];busy:boolean}>();const emit=defineEmits<{save:[tasks:{id?:number;title:string;intent:string}[]];cancel:[]}>();
+const draft=ref(props.tasks.map(t=>({...t,key:String(t.id)})));const opened=ref('');const dragged=ref(-1);const removeIndex=ref(-1);const confirmDelete=ref<HTMLDialogElement|null>(null);const error=ref('');
+function add(){const key=crypto.randomUUID();draft.value.push({id:undefined as unknown as number,title:'',intent:'',key});opened.value=key;}
+function drop(index:number){if(dragged.value<0)return;const [t]=draft.value.splice(dragged.value,1);draft.value.splice(index,0,t);dragged.value=-1;}
+function save(){if(!draft.value.length){error.value='至少保留一个任务';return}if(draft.value.some(t=>!t.title.trim()||!t.intent.trim())){error.value='请填写任务标题和研究要求';return}emit('save',draft.value.map(t=>({id:t.id,title:t.title.trim(),intent:t.intent.trim()})));}
+</script>
+<style scoped>
+.task-editor{height:100%;overflow:auto;padding:18px;background:#eaf2ff;box-sizing:border-box;border-radius:16px 16px 0 0}.editor-head,.task-row{display:flex;align-items:center;gap:7px}.editor-head h3{flex:1;margin:0}.task-row strong{flex:1;font-size:13px}.hint,.edit-task p{font-size:12px;color:#70819e;line-height:1.7}.edit-task{background:white;border:1px solid #cddff6;border-radius:12px;padding:12px;margin:12px 0}button{background:white;border:1px solid #cedbf0;border-radius:7px;padding:6px 8px;color:#3863ad;cursor:pointer}.drag{border:0;cursor:grab;padding:3px}.fields{display:grid;gap:10px;margin-top:12px}label{display:grid;gap:6px;font-size:12px}input,textarea{width:100%;box-sizing:border-box;border:1px solid #ccd9ee;border-radius:7px;padding:8px;font:inherit}.danger{color:#c94150}.add{width:100%;border-style:dashed;padding:12px}dialog{border:1px solid #dce4f2;border-radius:16px;padding:24px;max-width:400px}dialog::backdrop{background:#18253e55}.keep,.delete{color:white;margin:8px}.keep{background:#168559}.delete{background:#dc3545}
+</style>

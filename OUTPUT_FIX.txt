@@ -1,0 +1,27 @@
+Model output fix (2026-10-11)
+
+Configuration:
+- backend/.env now sets LLM_MAX_TOKENS=8192.
+- The same positive output budget is passed to synchronous and streaming model requests.
+- Reasoning tokens may count toward this budget depending on the provider.
+
+Failure handling:
+- Empty model responses, empty cleaned summaries/reports, length-truncated responses,
+  and streams without a final finish_reason are rejected.
+- Failed task summaries are marked failed rather than completed.
+- A failed final report emits an error and is not persisted as a successful report.
+- Model logs include mode, model, max_tokens, finish_reason, content length,
+  and completion token count when returned by the provider.
+- The adapter does not log prompts, answer text, reasoning text, or credentials.
+
+Validation:
+- 22 offline regression tests passed.
+- Real workflow validation output: .runtime/output-fix-validation.json
+- Successful validation report (when generated): .runtime/verified-final-report.md
+
+Run regression tests from this directory:
+backend\.venv\Scripts\python.exe -m unittest discover -s backend\tests -v
+
+After changing LLM_MAX_TOKENS, restart with stop-local.cmd then start-local.cmd.
+Start a new research run in the page to use the corrected configuration.
+Existing failed reports are retained as historical results.
