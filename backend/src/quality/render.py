@@ -29,6 +29,7 @@ ISSUE_LABEL = {
     "empty_reference_section": "参考文献段为空",
     "mixed_citation_style": "链接写法不统一",
     "unlabelled_link": "链接缺少可读文字",
+    "no_inline_citations": "全文无行内引用",
     "empty_report": "报告为空",
 }
 
@@ -78,6 +79,7 @@ def render_quality_report(result: dict[str, Any], topic: str = "", generated_at:
     lines.append("| 指标 | 数值 |")
     lines.append("| --- | --- |")
     lines.append(f"| 报告引用数 | {metrics.get('cited_links', 0)} |")
+    lines.append(f"| 其中行内引用 | {metrics.get('inline_citations', 0)} |")
     lines.append(f"| 去重后引用 | {metrics.get('cited_unique', 0)} |")
     lines.append(f"| 检索来源数 | {metrics.get('retrieved_unique', 0)} |")
     lines.append(f"| 可核验引用 | {metrics.get('verified', 0)} |")
@@ -108,6 +110,8 @@ def render_quality_report(result: dict[str, Any], topic: str = "", generated_at:
     suggestions: list[str] = []
     if metrics.get("unverified", 0):
         suggestions.append("逐条核对「疑似编造/未核验链接」，无法核实的结论请降级表述或删除。")
+    if any(issue.get("type") == "no_inline_citations" for issue in issues):
+        suggestions.append("把文末来源对应到具体结论：在关键段落补行内引用（[n] 或链接）。")
     if metrics.get("sections_without_source", 0):
         suggestions.append("为无来源的长章节补充引用，或明确标注为「作者分析」。")
     if metrics.get("uncited", 0):

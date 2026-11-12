@@ -103,7 +103,7 @@ class StructureCheckTests(unittest.TestCase):
 
 class CoverageCheckTests(unittest.TestCase):
     def test_long_section_without_source(self):
-        long_claim = "这是一个没有任何来源支撑的长段落，用来验证质检能否发现它。" * 12
+        long_claim = "实验数据显示该方案提升明显，但这部分没有任何来源支撑，用来验证质检。" * 14
         report = (
             "# 报告\n\n## 一、背景\n\n短引用段，见 https://llm-stats.com/benchmarks/mmmu-pro 。\n\n"
             f"## 二、分析\n\n{long_claim}\n"
@@ -112,6 +112,25 @@ class CoverageCheckTests(unittest.TestCase):
         issues, without = checks.coverage_issues(sections, citations)
         self.assertGreaterEqual(without, 1)
         self.assertIn("no_source_section", {issue.type for issue in issues})
+
+    def test_report_with_only_reference_list_gets_one_finding(self):
+        report = (
+            "# 报告\n\n## 一、背景\n\n" + ("背景介绍内容，没有任何行内引用。" * 20) + "\n\n"
+            "## 参考来源\n\n- 来源 A — https://example.com/a\n- 来源 B — https://example.com/b\n"
+        )
+        _sources, citations, sections = build(report)
+        issues, without = checks.coverage_issues(sections, citations)
+        self.assertEqual([issue.type for issue in issues], ["no_inline_citations"])
+        self.assertEqual(without, 0)
+
+    def test_short_claim_section_is_not_flagged(self):
+        report = (
+            "# 报告\n\n## 一、背景\n\n见 https://example.com/a 。\n\n"
+            "## 二、分析\n\n实验数据显示提升明显。\n"
+        )
+        _sources, citations, sections = build(report)
+        issues, without = checks.coverage_issues(sections, citations)
+        self.assertEqual(without, 0)
 
 
 class SourceQualityTests(unittest.TestCase):
@@ -189,7 +208,7 @@ class EngineTests(unittest.TestCase):
         for key in (
             "cited_links", "cited_unique", "retrieved_unique", "verified",
             "unverified", "uncited", "coverage", "source_usage",
-            "sections", "sections_without_source", "local_refs",
+            "sections", "sections_without_source", "local_refs", "inline_citations",
         ):
             self.assertIn(key, result["metrics"])
         self.assertEqual(result["metrics"]["verified"], 1)

@@ -51,6 +51,7 @@ class Citation:
     section: str
     line: int
     form: str  # markdown | bullet | bare | local
+    snippet: str = ""  # 该引用所在行的原文片段，用于在正文中定位
 
     @property
     def is_local(self) -> bool:
@@ -229,6 +230,9 @@ def extract_citations(markdown: str) -> list[Citation]:
                     Citation(url, urls.normalize(url), "", section, index, "local")
                 )
 
+    for citation in citations:
+        if 0 <= citation.line < len(lines):
+            citation.snippet = lines[citation.line].strip()[:160]
     return citations
 
 

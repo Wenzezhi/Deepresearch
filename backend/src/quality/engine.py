@@ -24,6 +24,7 @@ _PENALTY: dict[str, tuple[int, int]] = {
     "empty_reference_section": (3, 3),
     "local_only_sources": (3, 3),
     "duplicate_citation": (2, 6),
+    "no_inline_citations": (6, 6),
     "heading_level_jump": (2, 4),
     "mixed_citation_style": (2, 2),
     "unlabelled_link": (1, 2),
@@ -104,6 +105,31 @@ def _public_sources(
     return rows
 
 
+def _public_citations(
+    citations: list[parse.Citation], sections: list[parse.Section]
+) -> list[dict[str, Any]]:
+    """Every citation with its location, so the reader can jump to the text."""
+    reference_ranges = [
+        (section.line_start, section.line_end)
+        for section in sections
+        if section.is_reference
+    ]
+    rows: list[dict[str, Any]] = []
+    for citation in citations:
+        rows.append({
+            "url": citation.url,
+            "title": citation.text,
+            "form": citation.form,
+            "section": citation.section,
+            "line": citation.line,
+            "snippet": citation.snippet,
+            "in_reference": any(
+                start <= citation.line < end for start, end in reference_ranges
+            ),
+        })
+    return rows
+
+
 def audit(
     report: str,
     sources: list[parse.Source],
@@ -137,6 +163,8 @@ def audit(
     stats.sections = len([section for section in sections if section.level > 0])
     stats.sections_without_source = without_source
 
+    inline = checks.inline_citations(sections, citations)
+
     score = _score(issues)
     summary = {checks.ERROR: 0, checks.WARN: 0, checks.INFO: 0}
     for issue in issues:
@@ -148,6 +176,7 @@ def audit(
     metrics.pop("local_ids", None)
     metrics["coverage"] = stats.coverage
     metrics["source_usage"] = stats.source_usage
+    metrics["inline_citations"] = len(inline)
 
     return {
         "report_available": bool(report.strip()),
@@ -157,4 +186,5 @@ def audit(
         "issues": [issue.public() for issue in issues],
         "issue_summary": summary,
         "sources": _public_sources(sources, citations),
+        "citations": _public_citations(citations, sections),
     }

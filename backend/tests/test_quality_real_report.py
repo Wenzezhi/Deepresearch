@@ -37,6 +37,11 @@ class RealReportTests(unittest.TestCase):
         self.assertIn(result["score"], range(0, 101))
         self.assertIn(result["grade"], {"A", "B", "C", "D"})
         self.assertGreaterEqual(len(result["sources"]), 15)
+        # 真实报告的来源只堆在文末，应给出"全文无行内引用"这一条明确结论
+        self.assertEqual(result["metrics"]["inline_citations"], 0)
+        self.assertIn("no_inline_citations", {issue["type"] for issue in result["issues"]})
+        self.assertGreaterEqual(len(result["citations"]), 20)
+        self.assertTrue(all(citation["section"] for citation in result["citations"]))
 
     def test_citations_from_report_are_matched_to_sources(self):
         issues, stats = checks.citation_issues(self.citations, self.sources, set())

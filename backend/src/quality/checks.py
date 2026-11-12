@@ -16,9 +16,12 @@ ERROR = "error"
 WARN = "warn"
 INFO = "info"
 
-_SECTION_MIN_CHARS = 200
+_SECTION_MIN_CHARS = 400
 _EMPTY_SECTION_CHARS = 50
 _SHORT_REPORT_CHARS = 800
+_CLAIM_PATTERN = re.compile(
+    r"\d|表明|显示|证明|提升|下降|显著|因此|结论|数据|实验|对比|增幅|占比|优于|弱于"
+)
 
 _CONCLUSION = re.compile(r"结论|总结|结语|小结|结论与展望")
 _LIMITATION = re.compile(r"局限|不足|风险|挑战|限制|边界")
@@ -34,6 +37,7 @@ class Issue:
     title: str | None = None
     section: str | None = None
     task_id: int | None = None
+    line: int | None = None
     snippet: str | None = None
     count: int | None = None
 
@@ -121,7 +125,8 @@ def citation_issues(
             url=citation.url,
             title=citation.text or None,
             section=section,
-            snippet=_snippet(citation.text or citation.url),
+            line=citation.line,
+            snippet=_snippet(citation.snippet or citation.text or citation.url),
         ))
 
     for key in sorted(stats.retrieved_http - stats.cited_http):
@@ -146,6 +151,8 @@ def citation_issues(
             url=citation.url,
             title=citation.text or None,
             section=citation.section or None,
+            line=citation.line,
+            snippet=_snippet(citation.snippet or ""),
             count=count,
         ))
 
@@ -222,38 +229,61 @@ def structure_issues(report: str, sections: list[Section], citations: list[Citat
     return issues, empty_count
 
 
-def _section_citation_count(
-    sections: list[Section], citations: list[Citation]
-) -> dict[str, int]:
-    counts: dict[str, int] = {}
+def _citation_in_reference(citation: Citation, sections: list[Section]) -> bool:
     for section in sections:
-        if section.is_reference or section.level == 0:
-            continue
-        if section.body_length < _SECTION_MIN_CHARS:
-            continue
-        counts[section.heading] = sum(
-            1 for citation in citations
-            if section.line_start <= citation.line < section.line_end
-        )
-    return counts
+        if section.is_reference and section.line_start <= citation.line < section.line_end:
+            return True
+    return False
+
+
+def inline_citations(sections: list[Section], citations: list[Citation]) -> list[Citation]:
+    """Citations that appear in the report body rather than a reference list."""
+    return [citation for citation in citations if not _citation_in_reference(citation, sections)]
 
 
 def coverage_issues(
     sections: list[Section], citations: list[Citation]
 ) -> tuple[list[Issue], int]:
-    """Long sections that make claims without citing anything."""
+    """Long claim-bearing sections that carry no inline citation.
+
+    A report that only dumps URLs into a trailing reference list gets a single
+    explicit finding instead of one noisy warning per section.
+    """
     issues: list[Issue] = []
-    counts = _section_citation_count(sections, citations)
+    inline = inline_citations(sections, citations)
+
+    if citations and not inline:
+        return [
+            Issue(
+                type="no_inline_citations",
+                severity=WARN,
+                message=(
+                    "全文没有任何行内引用：来源只堆在文末参考文献里，读者无法判断"
+                    "哪条结论来自哪条来源"
+                ),
+            )
+        ], 0
+
     without = 0
-    for heading, count in counts.items():
-        if count:
+    for section in sections:
+        if section.is_reference or section.level == 0:
+            continue
+        if section.body_length < _SECTION_MIN_CHARS:
+            continue
+        if any(section.line_start <= citation.line < section.line_end for citation in inline):
+            continue
+        if not _CLAIM_PATTERN.search(section.body):
             continue
         without += 1
-        if without <= 5:
+        if without <= 4:
             issues.append(Issue(
-                type="no_source_section", severity=INFO,
-                message="该章节较长但没有任何来源引用，结论无法核验",
-                section=heading,
+                type="no_source_section",
+                severity=INFO,
+                message=(
+                    f"该章节 {section.body_length} 字、包含具体结论，"
+                    "但没有任何行内引用，结论无法核验"
+                ),
+                section=section.heading,
             ))
     return issues, without
 
