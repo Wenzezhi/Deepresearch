@@ -195,7 +195,7 @@ def audit(
     citations = parse.extract_citations(report)
     citations, unresolved_numbers = parse.resolve_numbered_citations(citations, sources)
 
-    citation_issues, stats = checks.citation_issues(citations, sources, known_document_ids)
+    citation_issues, stats = checks.citation_issues(citations, sources, known_document_ids, sections)
     number_issue_list = checks.numbered_citation_issues(citations, sources, unresolved_numbers)
     structure_issue_list, _empty_sections = checks.structure_issues(report, sections, citations)
     coverage_issue_list, without_source = checks.coverage_issues(sections, citations)

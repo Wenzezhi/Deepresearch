@@ -85,8 +85,18 @@ def citation_issues(
     citations: list[Citation],
     sources: list[Source],
     known_document_ids: set[str],
+    sections: list[Section] | None = None,
 ) -> tuple[list[Issue], CitationStats]:
     """Citations vs. what the run actually retrieved."""
+    reference_ranges = [
+        (section.line_start, section.line_end)
+        for section in (sections or [])
+        if section.is_reference
+    ]
+
+    def in_reference(line: int) -> bool:
+        return any(start <= line < end for start, end in reference_ranges)
+
     stats = CitationStats(cited_links=len(citations))
     issues: list[Issue] = []
 
@@ -97,6 +107,7 @@ def citation_issues(
     stats.retrieved_unique = len(retrieved)
 
     counts: dict[str, int] = {}
+    body_counts: dict[str, int] = {}
     first_seen: dict[str, Citation] = {}
     local_counts: dict[str, int] = {}
     for citation in citations:
@@ -112,6 +123,9 @@ def citation_issues(
         if not key:
             continue
         counts[key] = counts.get(key, 0) + 1
+        # 文末来源列表按任务各列一次是正常写法，只统计正文内的重复
+        if not in_reference(citation.line):
+            body_counts[key] = body_counts.get(key, 0) + 1
         first_seen.setdefault(key, citation)
 
     stats.cited_http = set(counts)
@@ -146,7 +160,7 @@ def citation_issues(
             task_id=source.task_ids[0] if source.task_ids else None,
         ))
 
-    for key, count in sorted(counts.items()):
+    for key, count in sorted(body_counts.items()):
         if count < 2:
             continue
         citation = first_seen[key]
@@ -254,9 +268,14 @@ def structure_issues(report: str, sections: list[Section], citations: list[Citat
             message="报告没有局限/风险说明段落，建议补充研究边界",
         ))
 
+    heading_sections = [section for section in sections if section.heading]
     empty_count = 0
-    for section in headings:
+    for index, section in enumerate(heading_sections):
         if section.is_reference or section.level <= 1:
+            continue
+        # 有子标题的父章节（只有标题、内容都在子章节里）不算空章节
+        following = heading_sections[index + 1] if index + 1 < len(heading_sections) else None
+        if following is not None and following.level > section.level:
             continue
         if section.body_length < _EMPTY_SECTION_CHARS:
             empty_count += 1
@@ -437,10 +456,20 @@ def delivery_issues(
                 message="报告有「参考来源」标题，但下面没有任何链接",
             ))
 
+    reference_ranges = [
+        (section.line_start, section.line_end)
+        for section in sections
+        if section.is_reference
+    ]
+
+    def in_reference(line: int) -> bool:
+        return any(start <= line < end for start, end in reference_ranges)
+
+    # 只比较正文内的链接写法；正文用链接 + 文末用列表是正常写法
     forms = {
         citation.form
         for citation in citations
-        if citation.form in {"markdown", "bullet", "bare"}
+        if citation.form in {"markdown", "bullet", "bare"} and not in_reference(citation.line)
     }
     if len(forms) >= 2:
         issues.append(Issue(

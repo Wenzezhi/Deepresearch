@@ -36,6 +36,16 @@ class CitationCheckTests(unittest.TestCase):
         self.assertEqual(stats.verified, 1)
         self.assertNotIn("unverified_url", {issue.type for issue in issues})
 
+    def test_sources_listed_per_task_are_not_duplicates(self):
+        report = (
+            "# 报告\n\n## 一、结论\n\n见 https://llm-stats.com/benchmarks/mmmu-pro 。\n\n"
+            "## 参考来源\n\n- A — https://llm-stats.com/benchmarks/mmmu-pro\n"
+            "- B — https://llm-stats.com/benchmarks/mmmu-pro\n"
+        )
+        sources, citations, sections = build(report)
+        issues, _stats = checks.citation_issues(citations, sources, set(), sections)
+        self.assertNotIn("duplicate_citation", {issue.type for issue in issues})
+
     def test_duplicate_citation(self):
         report = (
             "# 报告\n\n## 一、结论\n\n"
@@ -96,6 +106,12 @@ class StructureCheckTests(unittest.TestCase):
 
     def test_h1_title_section_is_not_flagged_as_empty(self):
         report = "# 报告标题\n\n## 一、结论\n\n" + ("结论内容。" * 30) + "\n"
+        _sources, citations, sections = build(report)
+        issues, _empty = checks.structure_issues(report, sections, citations)
+        self.assertNotIn("empty_section", {issue.type for issue in issues})
+
+    def test_parent_heading_with_subsections_is_not_empty(self):
+        report = "# 报告\n\n## 三、证据\n\n### 3.1 细节\n\n" + ("证据内容。" * 30) + "\n"
         _sources, citations, sections = build(report)
         issues, _empty = checks.structure_issues(report, sections, citations)
         self.assertNotIn("empty_section", {issue.type for issue in issues})
@@ -176,6 +192,15 @@ class DeliveryCheckTests(unittest.TestCase):
         _sources, citations, sections = build(report)
         issues = checks.delivery_issues(report, sections, citations)
         self.assertIn("mixed_citation_style", {issue.type for issue in issues})
+
+    def test_inline_links_plus_reference_list_is_not_mixed_style(self):
+        report = (
+            "# 报告\n\n## 一、结论\n\n见 [链接](https://example.com/a) 。\n\n"
+            "## 参考来源\n\n- 来源一 — https://example.com/a\n"
+        )
+        _sources, citations, sections = build(report)
+        issues = checks.delivery_issues(report, sections, citations)
+        self.assertNotIn("mixed_citation_style", {issue.type for issue in issues})
 
 
 class EngineTests(unittest.TestCase):
