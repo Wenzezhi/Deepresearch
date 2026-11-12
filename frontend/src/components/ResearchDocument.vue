@@ -1,6 +1,5 @@
 <template><div class="reading-document">
 <div v-if="stale" class="report-update-notice" role="status">{{ loading?'正在更新研究，未修改任务保持不变；完成后刷新最终报告。':'最终报告待更新，当前显示上一次生成的报告。' }}</div>
-<section v-if="flase" class="report-block"><MarkdownDocument title="最终报告" :markdown="report" :run-id="runId" scope="report" :revision="revision" @chat="emit('chat',$event)"><template #actions><button class="note-action" @click="emit('note')">Note</button></template></MarkdownDocument></section>
 <section v-if="kind==='report'" class="report-block">
   <MarkdownDocument
     title="最终报告"

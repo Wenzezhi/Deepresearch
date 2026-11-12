@@ -455,9 +455,12 @@ class DeepResearchAgent:
         local_context = ""
         local_sources_summary = ""
 
+        document_library = getattr(self, "document_library", None)
+        local_document_ids = getattr(self, "local_document_ids", None) or []
+
         if (
-            self.document_library is not None
-            and self.local_document_ids
+            document_library is not None
+            and local_document_ids
         ):
             try:
                 # 综合子任务标题、研究意图和搜索关键词
@@ -472,9 +475,9 @@ class DeepResearchAgent:
                 )
 
                 # 从用户选择的本地文献中检索相关内容
-                local_hits = self.document_library.search(
+                local_hits = document_library.search(
                     query,
-                    document_ids=self.local_document_ids,
+                    document_ids=local_document_ids,
                     top_k=6
                 )
 
@@ -482,7 +485,7 @@ class DeepResearchAgent:
                 (
                     local_context,
                     local_sources_summary
-                ) = self.document_library.format_context(
+                ) = document_library.format_context(
                     local_hits
                 )
 
@@ -545,7 +548,7 @@ class DeepResearchAgent:
 
         if local_hits:
             task.notices.append(
-                f"已从 {len(self.local_document_ids)} 篇所选文献中召回 "
+                f"已从 {len(local_document_ids)} 篇所选文献中召回 "
                 f"{len(local_hits)} 段相关内容。"
             )
 
