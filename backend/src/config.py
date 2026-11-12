@@ -96,6 +96,13 @@ class Configuration(BaseModel):
         title="LLM Model ID",
         description="Optional model identifier for custom OpenAI-compatible services",
     )
+    llm_temperature: float = Field(
+        default=0.0,
+        ge=0,
+        le=2,
+        title="LLM Temperature",
+        description="Sampling temperature; some providers (e.g. Moonshot kimi-k2.x) only accept 1.0",
+    )
 
     @classmethod
     def from_env(cls, overrides: Optional[dict[str, Any]] = None) -> "Configuration":
