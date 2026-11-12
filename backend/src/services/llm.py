@@ -111,6 +111,30 @@ class ResearchLLM(HelloAgentsLLM):
             "上一次响应没有可用正文。请继续完成当前请求，将答案输出在正文 content 中，不要只返回推理内容。"
             "若仍需调用工具，请遵循原有工具调用格式。"}]
 
+    @staticmethod
+    def _sanitize_messages(messages):
+        """Make tool-call history acceptable to strict OpenAI-compatible providers.
+
+        Providers such as Moonshot reject an assistant turn whose content is empty
+        (including after a tool call round). We never mutate the caller's list;
+        only the outgoing copy is adjusted.
+        """
+        cleaned = []
+        for message in messages:
+            if not isinstance(message, dict):
+                cleaned.append(message)
+                continue
+            if message.get("role") == "assistant":
+                content = message.get("content")
+                if not (isinstance(content, str) and content.strip()):
+                    if message.get("tool_calls"):
+                        cleaned.append({**message, "content": "(调用工具)"})
+                        continue
+                    # Drop assistant turns that carry neither text nor tool calls.
+                    continue
+            cleaned.append(message)
+        return cleaned
+
     def _response_diagnostics(self, message, attempt):
         # Log presence only. Never expose reasoning, tool arguments, prompts, or keys.
         logger.info("LLM response fields model=%s attempt=%s has_reasoning=%s has_tool_calls=%s",
@@ -124,7 +148,7 @@ class ResearchLLM(HelloAgentsLLM):
             options = self._request_options(kwargs, stream=False)
             try:
                 response = self._client.chat.completions.create(
-                    messages=self._retry_messages(messages, empty_seen), **options)
+                    messages=self._retry_messages(self._sanitize_messages(messages), empty_seen), **options)
                 choice = response.choices[0] if response.choices else None
                 message = choice.message if choice else None
                 content = (message.content or "") if message else ""
@@ -146,7 +170,7 @@ class ResearchLLM(HelloAgentsLLM):
             response = None
             try:
                 response = self._client.chat.completions.create(
-                    messages=self._retry_messages(messages, empty_seen), **options)
+                    messages=self._retry_messages(self._sanitize_messages(messages), empty_seen), **options)
                 for chunk in response:
                     self._check_cancelled()
                     if getattr(chunk, "usage", None) is not None:
