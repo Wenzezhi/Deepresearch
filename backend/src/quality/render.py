@@ -30,6 +30,8 @@ ISSUE_LABEL = {
     "mixed_citation_style": "链接写法不统一",
     "unlabelled_link": "链接缺少可读文字",
     "no_inline_citations": "全文无行内引用",
+    "unresolved_citation_number": "引用编号不存在",
+    "uncited_reference": "参考文献未被引用",
     "empty_report": "报告为空",
 }
 

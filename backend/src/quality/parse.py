@@ -23,6 +23,10 @@ _SOURCE_LINE = re.compile(
 _BARE_URL = re.compile(r"https?://[^\s<>\"'()\[\]{}，。；、）】]+")
 _LOCAL_REF = re.compile(r"local://documents/[A-Za-z0-9:_-]+")
 _LOCAL_LABEL = re.compile(r"^\[[^\]]*本地文献[^\]]*\]\s*")
+_NUMERIC_CITATION = re.compile(r"(?<!\])\[(\d{1,2})\](?!\()")
+_NUMBERED_REFERENCE = re.compile(
+    r"^\s{0,3}\[(\d{1,2})\]\s*(?P<label>.+?)\s*$"
+)
 
 REFERENCE_HEADING = re.compile(r"参考(?:来源|文献|资料)|参考来源|References?", re.I)
 
@@ -53,6 +57,7 @@ class Citation:
     form: str  # markdown | bullet | bare | local
     snippet: str = ""  # 该引用所在行的原文片段，用于在正文中定位
     quote: str = ""  # 该引用所在的可见句子（去掉 markdown 标记），用于句中定位
+    number: int | None = None  # 编号引用 [n] 的编号
 
     @property
     def is_local(self) -> bool:
@@ -66,6 +71,7 @@ class Source:
     normalized: str
     kind: str  # web | local
     task_ids: list[int] = field(default_factory=list)
+    number: int | None = None  # 参考文献表中的编号
 
     @property
     def domain(self) -> str:
@@ -163,7 +169,7 @@ def split_sections(markdown: str) -> list[Section]:
 
 
 def parse_sources(text: str, task_id: int | None = None) -> list[Source]:
-    """Parse ``* title : url`` / ``- title — url`` source lists."""
+    """Parse ``* title : url`` / ``- title — url`` / ``[n] title. url`` lists."""
     found: list[Source] = []
     if not text:
         return found
@@ -171,6 +177,22 @@ def parse_sources(text: str, task_id: int | None = None) -> list[Source]:
         line = raw_line.strip()
         if not line:
             continue
+        numbered = _NUMBERED_REFERENCE.match(line)
+        if numbered:
+            label = numbered.group("label")
+            url_match = re.search(r"(https?://\S+|local://\S+)\s*$", label)
+            if url_match:
+                url = url_match.group(1).rstrip(".,;，。；")
+                if urls.is_http(url) or urls.is_local(url):
+                    found.append(Source(
+                        title=_clean_label(label[:url_match.start()].rstrip(" .．")),
+                        url=url,
+                        normalized=urls.normalize(url),
+                        kind="local" if urls.is_local(url) else "web",
+                        task_ids=[task_id] if task_id is not None else [],
+                        number=int(numbered.group(1)),
+                    ))
+                    continue
         match = _SOURCE_LINE.match(line)
         if not match:
             continue
@@ -202,12 +224,51 @@ def merge_sources(items: Iterable[Source]) -> list[Source]:
                 normalized=item.normalized,
                 kind=item.kind,
                 task_ids=list(item.task_ids),
+                number=item.number,
             )
             continue
         for task_id in item.task_ids:
             if task_id not in existing.task_ids:
                 existing.task_ids.append(task_id)
+        if existing.number is None:
+            existing.number = item.number
     return list(merged.values())
+
+
+def resolve_numbered_citations(
+    citations: list[Citation], sources: list[Source] | None = None
+) -> tuple[list[Citation], set[int]]:
+    """Bind ``[n]`` body citations to their reference entry.
+
+    The number → URL map comes from the report's own numbered reference list
+    first, falling back to numbered sources from the run's search results.
+    """
+    by_number = {
+        source.number: source for source in (sources or []) if source.number is not None
+    }
+    reference_map = {
+        citation.number: citation
+        for citation in citations
+        if citation.form == "reference" and citation.number is not None
+    }
+    unresolved: set[int] = set()
+    for citation in citations:
+        if citation.form != "numeric" or citation.number is None:
+            continue
+        reference = reference_map.get(citation.number)
+        if reference is not None:
+            citation.url = reference.url
+            citation.normalized = reference.normalized
+            citation.text = citation.text or reference.text
+            continue
+        source = by_number.get(citation.number)
+        if source is None:
+            unresolved.add(citation.number)
+            continue
+        citation.url = source.url
+        citation.normalized = source.normalized
+        citation.text = citation.text or source.title
+    return citations, unresolved
 
 
 def url_key(url: str) -> str:
@@ -232,6 +293,23 @@ def extract_citations(markdown: str) -> list[Citation]:
         remainder = line
         visible = visible_line(line)
 
+        # 参考文献表条目：[1] 标题. 域名. URL —— 作为一条"reference"引用参与核验
+        numbered_reference = _NUMBERED_REFERENCE.match(line)
+        if numbered_reference:
+            reference_label = numbered_reference.group("label")
+            url_match = re.search(r"(https?://\S+|local://\S+)\s*$", reference_label)
+            if url_match:
+                url = url_match.group(1).rstrip(".,;，。；")
+                if urls.is_http(url) or urls.is_local(url):
+                    title = _clean_label(reference_label[:url_match.start()].rstrip(" .．"))
+                    citations.append(
+                        Citation(url, urls.normalize(url), title,
+                                 section, index, "reference",
+                                 quote=title or url,
+                                 number=int(numbered_reference.group(1)))
+                    )
+                    continue
+
         for match in _MD_LINK.finditer(line):
             url = match.group("url").strip()
             label = match.group("text").strip()
@@ -241,6 +319,14 @@ def extract_citations(markdown: str) -> list[Citation]:
                          quote=sentence_at(visible, label) if label else url)
             )
         remainder = _MD_LINK.sub(" ", remainder)
+
+        # 编号引用：[1] / [2]（不跟括号，避免与 markdown 链接冲突）
+        for match in _NUMERIC_CITATION.finditer(remainder):
+            citations.append(
+                Citation("", "", "", section, index, "numeric",
+                         quote=sentence_at(visible, match.group(0)),
+                         number=int(match.group(1)))
+            )
 
         bullet = _BULLET_SOURCE.match(remainder)
         if bullet:

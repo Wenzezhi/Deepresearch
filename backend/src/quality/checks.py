@@ -40,6 +40,7 @@ class Issue:
     line: int | None = None
     snippet: str | None = None
     quote: str | None = None
+    number: int | None = None
     count: int | None = None
 
     def public(self) -> dict[str, Any]:
@@ -103,6 +104,9 @@ def citation_issues(
             document_id = urls.local_document_id(citation.url)
             stats.local_refs += 1
             local_counts[document_id] = local_counts.get(document_id, 0) + 1
+            continue
+        # 编号引用 [1] 被多次使用是规范写法，不算重复引用
+        if citation.form == "numeric":
             continue
         key = citation.normalized
         if not key:
@@ -171,6 +175,59 @@ def citation_issues(
         ))
 
     return issues, stats
+
+
+def numbered_citation_issues(
+    citations: list[Citation],
+    sources: list[Source],
+    unresolved: set[int],
+) -> list[Issue]:
+    """``[n]`` body citations vs. the numbered reference list."""
+    issues: list[Issue] = []
+    for number in sorted(unresolved):
+        first = next(
+            (citation for citation in citations
+             if citation.form == "numeric" and citation.number == number),
+            None,
+        )
+        issues.append(Issue(
+            type="unresolved_citation_number",
+            severity=ERROR,
+            message=f"正文引用了编号 [{number}]，但参考文献表里找不到对应条目",
+            section=first.section if first else None,
+            line=first.line if first else None,
+            quote=first.quote if first else None,
+            number=number,
+        ))
+
+    numeric = [citation for citation in citations if citation.form == "numeric"]
+    if numeric:
+        cited_numbers = {citation.number for citation in numeric}
+        reference_entries = [
+            citation for citation in citations
+            if citation.form == "reference" and citation.number is not None
+        ]
+        if reference_entries:
+            uncited_refs = [
+                (entry.number, entry.text, entry.url) for entry in reference_entries
+                if entry.number not in cited_numbers
+            ]
+        else:
+            uncited_refs = [
+                (source.number, source.title, source.url)
+                for source in sources
+                if source.number is not None and source.number not in cited_numbers
+            ]
+        for number, title, url in uncited_refs[:5]:
+            issues.append(Issue(
+                type="uncited_reference",
+                severity=INFO,
+                message=f"参考文献 [{number}] 在正文中没有被引用",
+                title=title or None,
+                url=url or None,
+                number=number,
+            ))
+    return issues
 
 
 def structure_issues(report: str, sections: list[Section], citations: list[Citation]) -> tuple[list[Issue], int]:
@@ -380,7 +437,11 @@ def delivery_issues(
                 message="报告有「参考来源」标题，但下面没有任何链接",
             ))
 
-    forms = {citation.form for citation in citations if citation.form != "local"}
+    forms = {
+        citation.form
+        for citation in citations
+        if citation.form in {"markdown", "bullet", "bare"}
+    }
     if len(forms) >= 2:
         issues.append(Issue(
             type="mixed_citation_style", severity=INFO,

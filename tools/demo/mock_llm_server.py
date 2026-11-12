@@ -77,29 +77,24 @@ def _report(prompt: str) -> str:
         seen.add(url)
         sources.append((match.group("title").strip(), url))
 
-    def cite(index: int) -> str:
-        if index < len(sources):
-            title, url = sources[index]
-            return f"[{title}]({url})"
-        return "（暂无来源）"
-
+    # 规范写法：正文用 [n] 编号引用，URL 只出现在文末参考文献表
     blocks = [
         f"# {topic}",
         "",
         "## 一、背景概览",
         "",
-        f"2025 年，多模态大模型的主线从「模态拼接」转向「原生统一」{cite(0)}。"
-        "评测体系同步转向反污染设计，随机猜测基线被显著压低"
-        f"{cite(1) if len(sources) > 1 else ''}。",
+        f"2025 年，多模态大模型的主线从「模态拼接」转向「原生统一」[1]。"
+        "评测体系同步转向反污染设计，随机猜测基线被显著压低[2]。",
         "",
         "## 二、核心发现",
         "",
-        f"1. **架构**：原生统一架构在同等算力下不劣于 late-fusion，代表性路线见 {cite(2) if len(sources) > 2 else cite(0)}。",
-        f"2. **评测**：MMMU-Pro 通过视觉嵌入与选项扩展抑制记忆型作答，前沿分数集中在 0.807–0.860{cite(3) if len(sources) > 3 else ''}。",
-        "3. **长视频**：先注入时序再压缩 token 的路线收益最稳，缺少时序编码时单纯压缩会收益递减"
-        f"{cite(4) if len(sources) > 4 else ''}。",
-        "4. **智能体**：短任务成功率已较高，但长程任务的效率与恢复能力仍是瓶颈"
-        "（另见一篇未检索到的补充材料[伪造链接](https://fabricated.example.org/paper)）。",
+        "1. **架构**：原生统一架构在同等算力下不劣于 late-fusion，代表性路线见 [1]。",
+        "2. **评测**：MMMU-Pro 通过视觉嵌入与选项扩展抑制记忆型作答，"
+        "前沿分数集中在 0.807–0.860[2]。",
+        "3. **长视频**：先注入时序再压缩 token 的路线收益最稳，缺少时序编码时"
+        "单纯压缩会收益递减[3]。",
+        "4. **智能体**：短任务成功率已较高，但长程任务的效率与恢复能力仍是瓶颈[4]；"
+        "另有一条编号在本表中不存在[9]。",
         "",
         "## 三、风险与局限",
         "",
@@ -113,14 +108,20 @@ def _report(prompt: str) -> str:
         "",
         "## 四、结论",
         "",
-        f"2025 年的关键变化是架构范式与评测方法同时收敛{cite(0)}；"
+        "2025 年的关键变化是架构范式与评测方法同时收敛[1]；"
         "落地时应优先核对来源可信度与评测口径，再决定技术路线。",
         "",
-        "## 参考来源",
+        "## 参考文献",
         "",
     ]
-    for title, url in sources:
-        blocks.append(f"- {title} — {url}")
+    for index, (title, url) in enumerate(sources, start=1):
+        domain = url.split("/")[2] if "//" in url else ""
+        blocks.append(f"[{index}] {title}. {domain}. {url}")
+    # 一条"检索结果里没有"的参考文献，用于演示未核验检测
+    blocks.append(
+        f"[{len(sources) + 1}] 一份并不存在的补充材料. fabricated.example.org. "
+        "https://fabricated.example.org/paper"
+    )
     blocks.append("")
     return "\n".join(blocks)
 

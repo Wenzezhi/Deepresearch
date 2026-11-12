@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from quality import parse, urls
+from quality import checks, parse, urls
 
 REPORT = """# 研究报告
 
@@ -126,6 +126,82 @@ class CitationParsingTests(unittest.TestCase):
         bare = [citation for citation in citations if citation.form == "bare"]
         self.assertTrue(bare)
         self.assertIn("实验数据", bare[0].quote)
+
+
+class NumberedCitationTests(unittest.TestCase):
+    REPORT = """# 报告
+
+## 一、结论
+
+原生统一架构在同等算力下不劣于 late-fusion[1]。长视频先注入时序再压缩[2]。
+
+## 参考文献
+
+[1] Native Multimodal Models. arxiv.org. https://arxiv.org/html/2605.25343v1
+[2] STORM. research.nvidia.com. https://research.nvidia.com/labs/lpr/storm
+"""
+
+    def test_numbered_reference_list_is_parsed(self):
+        sources = parse.parse_sources(self.REPORT)
+        numbers = [(source.number, source.title) for source in sources]
+        self.assertIn((1, "Native Multimodal Models. arxiv.org"), numbers)
+        self.assertEqual(sources[0].kind, "web")
+
+    def test_numeric_citations_are_resolved_to_urls(self):
+        sources = parse.merge_sources(parse.parse_sources(self.REPORT))
+        citations = parse.extract_citations(self.REPORT)
+        numeric = [citation for citation in citations if citation.form == "numeric"]
+        self.assertEqual([citation.number for citation in numeric], [1, 2])
+        resolved, unresolved = parse.resolve_numbered_citations(citations, sources)
+        self.assertEqual(unresolved, set())
+        by_number = {citation.number: citation for citation in resolved if citation.form == "numeric"}
+        self.assertEqual(by_number[1].url, "https://arxiv.org/html/2605.25343v1")
+        self.assertEqual(by_number[2].normalized, "https://research.nvidia.com/labs/lpr/storm")
+
+    def test_numbers_resolve_from_report_reference_list(self):
+        # 检索事件的来源没有编号；编号来自报告自己的参考文献表
+        citations = parse.extract_citations(self.REPORT)
+        resolved, unresolved = parse.resolve_numbered_citations(citations, [])
+        self.assertEqual(unresolved, set())
+        numeric = {c.number: c for c in resolved if c.form == "numeric"}
+        self.assertEqual(numeric[1].url, "https://arxiv.org/html/2605.25343v1")
+
+    def test_repeated_numeric_citations_are_not_duplicates(self):
+        report = (
+            "## 一、结论\n\n结论 A[1]。结论 B[1]。\n\n"
+            "## 参考文献\n\n[1] T. d. https://example.com/a\n"
+        )
+        sources = parse.merge_sources(parse.parse_sources(report))
+        citations, _unresolved = parse.resolve_numbered_citations(
+            parse.extract_citations(report), sources
+        )
+        issues, _stats = checks.citation_issues(citations, sources, set())
+        self.assertNotIn("duplicate_citation", {issue.type for issue in issues})
+
+    def test_uncited_reference_from_report_list(self):
+        report = (
+            "## 一、结论\n\n结论[1]。\n\n"
+            "## 参考文献\n\n[1] A. d. https://example.com/a\n[2] B. d. https://example.com/b\n"
+        )
+        sources = parse.merge_sources(parse.parse_sources(report))
+        citations, unresolved = parse.resolve_numbered_citations(
+            parse.extract_citations(report), sources
+        )
+        issues = checks.numbered_citation_issues(citations, sources, unresolved)
+        uncited = [issue for issue in issues if issue.type == "uncited_reference"]
+        self.assertEqual([issue.number for issue in uncited], [2])
+
+    def test_unresolved_number_is_reported(self):
+        report = self.REPORT.replace("再压缩[2]。", "再压缩[9]。")
+        sources = parse.merge_sources(parse.parse_sources(report))
+        citations, unresolved = parse.resolve_numbered_citations(
+            parse.extract_citations(report), sources
+        )
+        self.assertEqual(unresolved, {9})
+        issues = checks.numbered_citation_issues(citations, sources, unresolved)
+        types = {issue.type for issue in issues}
+        self.assertIn("unresolved_citation_number", types)
+        self.assertIn("uncited_reference", types)
 
 
 class UrlNormalisationTests(unittest.TestCase):

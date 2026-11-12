@@ -1,16 +1,20 @@
 /**
- * 原文质检标记图层。
+ * 原文质检标注图层。
  *
- * 只对已经渲染好的报告 DOM 做"装饰"：给具体链接、句子、段落加高亮并插入角标，
- * 关闭开关时全部移除、DOM 复原。不修改 MarkdownDocument 组件，也不拦截事件。
+ * 规范标注方式：在具体链接/句子处插入上标角标（[n] 或严重级符号），
+ * 高亮样式可选（角标 / 下划线 / 底色），关闭开关时全部移除、DOM 复原。
+ * 不修改 MarkdownDocument 组件，也不拦截事件。
  */
-import type { QualityIssue } from "../services/quality";
+import type { QualityCitation, QualityIssue } from "../services/quality";
+
+export type MarkerStyle = "sup" | "underline" | "fill";
 
 const FLAG_CLASS = "rqg-flagged";
 const FOCUS_CLASS = "rqg-focus";
 const SENTENCE_CLASS = "rqg-sentence";
 const FLASH_CLASS = "rqg-flash";
 const BADGE_ATTR = "data-rqg-badge";
+const STYLE_ATTR = "data-rqg-style";
 
 export interface MarkerTarget {
   url?: string;
@@ -19,10 +23,10 @@ export interface MarkerTarget {
   section?: string;
 }
 
-interface MarkerRecord {
-  el: HTMLElement;
-  className: string;
-  badge?: HTMLElement;
+interface Located {
+  block: HTMLElement;
+  anchor?: HTMLAnchorElement;
+  wrapper?: HTMLElement;
 }
 
 function normalize(text: string): string {
@@ -63,75 +67,121 @@ function blockOf(node: Node | null, root: HTMLElement): HTMLElement | null {
 
 export class QualityMarkerLayer {
   private root: HTMLElement | null;
-  private markers: MarkerRecord[] = [];
+  private style: MarkerStyle = "underline";
+  private flagged: HTMLElement[] = [];
+  private chips: HTMLElement[] = [];
   private wrappers: HTMLElement[] = [];
   private cleanups: Array<() => void> = [];
 
-  constructor(button: HTMLElement | null) {
+  constructor(button: HTMLElement | null, style: MarkerStyle = "underline") {
     this.root = resolveRoot(button);
+    this.style = style;
+    this.applyStyle();
   }
 
   get available(): boolean {
     return this.root !== null;
   }
 
+  setStyle(style: MarkerStyle): void {
+    this.style = style;
+    this.applyStyle();
+  }
+
+  private applyStyle(): void {
+    if (this.root) this.root.setAttribute(STYLE_ATTR, this.style);
+  }
+
   refresh(button: HTMLElement | null): void {
     this.clear();
     this.root = resolveRoot(button);
+    this.applyStyle();
   }
 
-  /** 在报告中标出问题位置：链接级优先，其次句子/段落，最后章节标题。 */
-  apply(issues: QualityIssue[]): number {
+  /** 在具体链接/句子上插入角标：引用 [n]，问题用严重级符号。 */
+  apply(issues: QualityIssue[], citations: QualityCitation[] = []): number {
     this.clear();
     if (!this.root) return 0;
-    const used = new Set<HTMLElement>();
+    this.applyStyle();
+    let count = 0;
 
+    for (const citation of citations) {
+      if (!citation.number) continue;
+      const located = this.resolve({
+        url: citation.url,
+        quote: citation.quote,
+        snippet: citation.snippet,
+        section: citation.section
+      });
+      if (!located) continue;
+      this.insertChip(
+        located,
+        `[${citation.number}]`,
+        "rqg-sup-chip",
+        `引用 [${citation.number}]：${citation.title || citation.url}`
+      );
+      count += 1;
+    }
+
+    const used = new Set<HTMLElement>();
     for (const issue of issues) {
-      const located = this.resolve(issue);
+      const located = this.resolve({
+        url: issue.url,
+        quote: issue.quote,
+        snippet: issue.snippet,
+        section: issue.section
+      });
       if (!located || used.has(located.block)) continue;
       used.add(located.block);
       located.block.classList.add(FLAG_CLASS);
-      const badge = document.createElement("span");
-      badge.setAttribute(BADGE_ATTR, issue.severity);
-      badge.className = "rqg-inline-badge";
-      badge.textContent =
-        issue.severity === "error" ? "✕" : issue.severity === "warn" ? "!" : "i";
-      badge.title = issue.message;
-      located.block.appendChild(badge);
-      this.markers.push({ el: located.block, className: FLAG_CLASS, badge });
+      this.flagged.push(located.block);
+      this.insertChip(
+        located,
+        issue.severity === "error" ? "✕" : issue.severity === "warn" ? "!" : "i",
+        "rqg-inline-badge",
+        issue.message,
+        issue.severity
+      );
+      count += 1;
     }
-    return this.markers.length;
+    return count;
   }
 
-  /** 精确定位：优先跳到具体链接，其次跳到具体句子。 */
+  private insertChip(
+    located: Located,
+    text: string,
+    className: string,
+    title: string,
+    severity?: string
+  ): void {
+    const chip = document.createElement("span");
+    chip.className = className;
+    chip.textContent = text;
+    chip.title = title;
+    if (severity) chip.setAttribute(BADGE_ATTR, severity);
+    const host = located.anchor || located.wrapper || located.block;
+    host.insertAdjacentElement("afterend", chip);
+    this.chips.push(chip);
+  }
+
+  /** 精确定位：链接 → 句子 → 段落 → 章节。 */
   locate(target: MarkerTarget): boolean {
     this.clear();
     if (!this.root) return false;
     const located = this.resolve(target);
     if (!located) return false;
-
-    if (located.anchor) {
-      located.anchor.classList.add(FOCUS_CLASS, FLASH_CLASS);
-      located.anchor.scrollIntoView({ behavior: "smooth", block: "center" });
-      const timer = window.setTimeout(() => {
-        located.anchor?.classList.remove(FLASH_CLASS);
-      }, 2400);
-      this.cleanups.push(() => window.clearTimeout(timer));
-      this.markers.push({ el: located.anchor, className: FOCUS_CLASS });
-      return true;
-    }
-
-    located.block.classList.add(FLAG_CLASS, FLASH_CLASS);
-    located.block.scrollIntoView({ behavior: "smooth", block: "center" });
+    const element = located.anchor || located.wrapper || located.block;
+    element.classList.add(FOCUS_CLASS, FLASH_CLASS);
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
     const timer = window.setTimeout(() => {
-      located.block.classList.remove(FLASH_CLASS);
+      element.classList.remove(FLASH_CLASS);
     }, 2400);
     this.cleanups.push(() => window.clearTimeout(timer));
-    this.markers.push({ el: located.block, className: FLAG_CLASS });
+    this.flagged.push(element);
     return true;
   }
 
-  private resolve(target: MarkerTarget): { block: HTMLElement; anchor?: HTMLAnchorElement } | null {
+  private resolve(target: MarkerTarget): Located | null {
     if (!this.root) return null;
 
     if (target.url) {
@@ -147,9 +197,8 @@ export class QualityMarkerLayer {
       const wrapper = this.wrapText(text.slice(0, 60));
       if (wrapper) {
         this.wrappers.push(wrapper);
-        const block = blockOf(wrapper, this.root);
-        if (block) return { block };
-        return { block: wrapper };
+        const block = blockOf(wrapper, this.root) || wrapper;
+        return { block, wrapper };
       }
     }
 
@@ -173,20 +222,15 @@ export class QualityMarkerLayer {
     );
   }
 
-  /** 在文本节点中把目标句子包成 span，实现句子级高亮。 */
+  /** 在文本节点中把目标句子包成 span，实现句子级定位/高亮。 */
   private wrapText(text: string): HTMLElement | null {
     if (!this.root || !text) return null;
     const walker = document.createTreeWalker(this.root, NodeFilter.SHOW_TEXT);
     let node = walker.nextNode() as Text | null;
     while (node) {
-      const content = normalize(node.data);
-      if (content.includes(text)) {
-        const raw = node.data;
-        const index = raw.indexOf(text);
-        if (index < 0) {
-          // 空白差异导致定位不到，退化为文本节点父元素
-          return blockOf(node, this.root);
-        }
+      const raw = node.data;
+      const index = raw.indexOf(text);
+      if (index >= 0) {
         const range = document.createRange();
         range.setStart(node, index);
         range.setEnd(node, Math.min(raw.length, index + text.length));
@@ -205,11 +249,12 @@ export class QualityMarkerLayer {
   }
 
   clear(): void {
-    for (const marker of this.markers) {
-      marker.el.classList.remove(marker.className, FLASH_CLASS);
-      marker.badge?.remove();
+    for (const chip of this.chips) chip.remove();
+    this.chips = [];
+    for (const element of this.flagged) {
+      element.classList.remove(FLAG_CLASS, FOCUS_CLASS, FLASH_CLASS);
     }
-    this.markers = [];
+    this.flagged = [];
     for (const wrapper of this.wrappers) {
       const parent = wrapper.parentNode;
       if (!parent) continue;
@@ -222,8 +267,8 @@ export class QualityMarkerLayer {
     if (this.root) {
       this.root.querySelectorAll<HTMLElement>("[data-rqg-badge]").forEach((node) => node.remove());
       this.root
-        .querySelectorAll<HTMLElement>(`.${FLAG_CLASS},.${FOCUS_CLASS},.${SENTENCE_CLASS}`)
-        .forEach((node) => node.classList.remove(FLAG_CLASS, FOCUS_CLASS, SENTENCE_CLASS, FLASH_CLASS));
+        .querySelectorAll<HTMLElement>(".rqg-sup-chip")
+        .forEach((node) => node.remove());
     }
   }
 }

@@ -12,6 +12,8 @@ _PENALTY: dict[str, tuple[int, int]] = {
     "empty_report": (100, 100),
     "unverified_url": (12, 36),
     "local_ref_missing": (8, 16),
+    "unresolved_citation_number": (10, 20),
+    "uncited_reference": (1, 5),
     "report_too_short": (6, 6),
     "few_sources": (10, 10),
     "missing_conclusion": (8, 8),
@@ -90,6 +92,7 @@ def _public_sources(
                 "task_ids": [],
                 "cited": True,
                 "verified": False,
+                "number": first.number if first else None,
             })
             continue
         rows.append({
@@ -101,6 +104,7 @@ def _public_sources(
             "task_ids": source.task_ids,
             "cited": key in cited_keys,
             "verified": True,
+            "number": source.number,
         })
     return rows
 
@@ -124,6 +128,7 @@ def _public_citations(
             "line": citation.line,
             "snippet": citation.snippet,
             "quote": citation.quote,
+            "number": citation.number,
             "in_reference": any(
                 start <= citation.line < end for start, end in reference_ranges
             ),
@@ -144,8 +149,10 @@ def audit(
 
     sections = parse.split_sections(report)
     citations = parse.extract_citations(report)
+    citations, unresolved_numbers = parse.resolve_numbered_citations(citations, sources)
 
     citation_issues, stats = checks.citation_issues(citations, sources, known_document_ids)
+    number_issue_list = checks.numbered_citation_issues(citations, sources, unresolved_numbers)
     structure_issue_list, _empty_sections = checks.structure_issues(report, sections, citations)
     coverage_issue_list, without_source = checks.coverage_issues(sections, citations)
     quality_issue_list = checks.source_quality_issues(sources, tasks)
@@ -153,6 +160,7 @@ def audit(
 
     issues = [
         *citation_issues,
+        *number_issue_list,
         *structure_issue_list,
         *coverage_issue_list,
         *quality_issue_list,
@@ -178,6 +186,9 @@ def audit(
     metrics["coverage"] = stats.coverage
     metrics["source_usage"] = stats.source_usage
     metrics["inline_citations"] = len(inline)
+    metrics["numeric_citations"] = len(
+        [citation for citation in citations if citation.form == "numeric"]
+    )
 
     return {
         "report_available": bool(report.strip()),

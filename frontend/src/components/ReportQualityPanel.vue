@@ -62,6 +62,19 @@
           <div class="rqg-metric"><b>{{ audit.metrics.sections_without_source }}</b><span>无来源章节</span></div>
         </div>
 
+        <div class="rqg-style-row">
+          <span>标注方式</span>
+          <button
+            v-for="option in styleOptions"
+            :key="option.id"
+            type="button"
+            :class="{ active: markerStyle === option.id }"
+            @click="setMarkerStyle(option.id)"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
         <p class="rqg-hint">
           关闭本面板不会清除原文标记；标记由工具栏独立的「标记」按钮控制。
         </p>
@@ -111,7 +124,7 @@
             :disabled="!citationFor(source)"
             @click="locateCitation(citationFor(source))"
           >
-            <span class="rqg-source-index">{{ source.index }}</span>
+            <span class="rqg-source-index">{{ source.number ? `[${source.number}]` : source.index }}</span>
             <span class="rqg-source-body">
               <strong>{{ source.title }}</strong>
               <span>{{ source.domain }}</span>
@@ -137,7 +150,7 @@
             class="rqg-citation"
             @click="locateCitation(citation)"
           >
-            <span class="rqg-citation-line">{{ citation.line + 1 }}</span>
+            <span class="rqg-citation-line">{{ citation.number ? `[${citation.number}]` : citation.line + 1 }}</span>
             <span class="rqg-citation-body">
               <strong>{{ citation.quote || citation.snippet || citation.title || citation.url }}</strong>
               <span>{{ citation.title || citation.url }}</span>
@@ -182,7 +195,7 @@ import {
   type QualityReportPayload,
   type QualitySource
 } from "../services/quality";
-import { QualityMarkerLayer, type MarkerTarget } from "./QualityMarkerLayer";
+import { QualityMarkerLayer, type MarkerStyle, type MarkerTarget } from "./QualityMarkerLayer";
 
 const props = defineProps<{ runId?: string; report: string }>();
 
@@ -197,6 +210,13 @@ const reportLoading = ref(false);
 const reportError = ref("");
 const markersOn = ref(false);
 const markedCount = ref(0);
+const markerStyle = ref<MarkerStyle>("underline");
+const STYLE_KEY = "rqg:style";
+const styleOptions: Array<{ id: MarkerStyle; label: string }> = [
+  { id: "sup", label: "角标" },
+  { id: "underline", label: "角标+下划线" },
+  { id: "fill", label: "角标+底色" }
+];
 
 let markerLayer: QualityMarkerLayer | null = null;
 
@@ -217,8 +237,21 @@ const summaryText = computed(() => {
 });
 
 function ensureLayer(): QualityMarkerLayer {
-  if (!markerLayer) markerLayer = new QualityMarkerLayer(buttonEl.value);
+  if (!markerLayer) {
+    markerLayer = new QualityMarkerLayer(buttonEl.value, markerStyle.value);
+  }
   return markerLayer;
+}
+
+function setMarkerStyle(style: MarkerStyle) {
+  markerStyle.value = style;
+  try {
+    localStorage.setItem(STYLE_KEY, style);
+  } catch {
+    /* 隐私模式忽略 */
+  }
+  markerLayer?.setStyle(style);
+  if (markersOn.value) applyMarkers();
 }
 
 function citationFor(source: QualitySource): QualityCitation | null {
@@ -268,8 +301,9 @@ function closePanel() {
 function applyMarkers() {
   const layer = ensureLayer();
   layer.refresh(buttonEl.value);
+  layer.setStyle(markerStyle.value);
   if (!audit.value) return;
-  markedCount.value = layer.apply(audit.value.issues);
+  markedCount.value = layer.apply(audit.value.issues, audit.value.citations);
 }
 
 function clearMarkers() {
@@ -369,6 +403,14 @@ watch(
 
 onMounted(async () => {
   try {
+    const savedStyle = localStorage.getItem(STYLE_KEY);
+    if (savedStyle === "sup" || savedStyle === "underline" || savedStyle === "fill") {
+      markerStyle.value = savedStyle;
+    }
+  } catch {
+    /* 隐私模式忽略 */
+  }
+  try {
     markersOn.value = localStorage.getItem(storageKey.value) === "1";
   } catch {
     markersOn.value = false;
@@ -444,6 +486,13 @@ onBeforeUnmount(() => {
 .rqg-metric span { font-size: 11px; color: #6f809e; }
 .rqg-danger b { color: #c0392b; }
 .rqg-hint { margin: 0 0 12px; font-size: 11px; color: #8b9ab5; }
+.rqg-style-row { display: flex; gap: 6px; align-items: center; margin: 0 0 10px; font-size: 11px; color: #7a88a4; flex-wrap: wrap; }
+.rqg-style-row button {
+  border: 1px solid #dbe5f3; background: #fff; color: #5c6d8c;
+  border-radius: 6px; padding: 3px 8px; cursor: pointer; font-size: 11px;
+}
+.rqg-style-row button.active { border-color: #2b6cd4; color: #2b6cd4; background: #f2f7ff; }
+.rqg-cite-num { color: #2b6cd4; font-weight: 700; margin-right: 4px; }
 .rqg-tabs { display: flex; gap: 4px; border-bottom: 1px solid #e8eef8; margin-bottom: 10px; flex-wrap: wrap; }
 .rqg-tabs button {
   border: 0; background: transparent; padding: 8px 8px; cursor: pointer;
@@ -495,7 +544,30 @@ onBeforeUnmount(() => {
 
 <style>
 /* 标记类作用于 MarkdownDocument 渲染出的 DOM，必须保持非 scoped。 */
-.rqg-flagged {
+/* 标注方式由 .markdown-body[data-rqg-style] 控制，默认角标+下划线。 */
+.rqg-sup-chip {
+  display: inline-block;
+  margin-left: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #2b6cd4;
+  vertical-align: super;
+  line-height: 1;
+  cursor: help;
+}
+[data-rqg-style="sup"] .rqg-flagged {
+  background: transparent !important;
+  box-shadow: none;
+}
+[data-rqg-style="underline"] .rqg-flagged {
+  background: transparent !important;
+  box-shadow: none;
+  text-decoration: underline;
+  text-decoration-color: #e0a500;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+[data-rqg-style="fill"] .rqg-flagged {
   background: #fff7d6 !important;
   box-shadow: inset 3px 0 0 #e0a500;
   border-radius: 3px;
@@ -506,22 +578,18 @@ onBeforeUnmount(() => {
   border-radius: 3px;
   padding: 0 2px;
 }
-.rqg-sentence {
-  background: #fff3b0;
-  box-shadow: inset 0 -2px 0 #e0a500;
-  border-radius: 2px;
-}
+.rqg-sentence { border-bottom: 2px solid #e0a500; }
 .rqg-focus.rqg-flash { animation: rqg-flash 2.4s ease-out; }
 .rqg-flagged.rqg-flash { animation: rqg-flash 2.4s ease-out; }
 @keyframes rqg-flash {
   0% { background: #ffd75e; }
-  100% { background: #fff7d6; }
+  100% { background: transparent; }
 }
 .rqg-inline-badge {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 15px; height: 15px; margin-left: 6px; border-radius: 50%;
+  width: 15px; height: 15px; margin-left: 3px; border-radius: 50%;
   font-size: 10px; font-weight: 700; color: #fff; background: #7a88a4;
-  vertical-align: middle; cursor: help;
+  vertical-align: super; cursor: help;
 }
 .rqg-inline-badge[data-rqg-badge="error"] { background: #c0392b; }
 .rqg-inline-badge[data-rqg-badge="warn"] { background: #c98a00; }

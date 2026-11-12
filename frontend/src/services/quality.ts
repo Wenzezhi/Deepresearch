@@ -13,6 +13,7 @@ export interface QualityIssue {
   line?: number;
   snippet?: string;
   quote?: string;
+  number?: number;
   count?: number;
 }
 
@@ -39,6 +40,7 @@ export interface QualityCitation {
   line: number;
   snippet: string;
   quote: string;
+  number?: number | null;
   in_reference: boolean;
 }
 
@@ -51,6 +53,7 @@ export interface QualitySource {
   task_ids: number[];
   cited: boolean;
   verified: boolean;
+  number?: number | null;
 }
 
 export interface QualityAudit {
@@ -108,6 +111,8 @@ export const ISSUE_LABELS: Record<string, string> = {
   mixed_citation_style: "链接写法不统一",
   unlabelled_link: "链接缺少可读文字",
   no_inline_citations: "全文无行内引用",
+  unresolved_citation_number: "引用编号不存在",
+  uncited_reference: "参考文献未被引用",
   empty_report: "报告为空"
 };
 
