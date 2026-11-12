@@ -55,7 +55,7 @@ class RealReportTests(unittest.TestCase):
         markdown = render.render_quality_report(result, topic="多模态大模型 2025 关键突破")
         self.assertIn("# 报告质检单", markdown)
         self.assertIn("## 二、体检指标", markdown)
-        self.assertIn("## 三、问题清单", markdown)
+        self.assertIn("问题清单", markdown)
 
 
 if __name__ == "__main__":

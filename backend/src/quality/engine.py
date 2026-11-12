@@ -136,6 +136,50 @@ def _public_citations(
     return rows
 
 
+def _public_references(
+    citations: list[parse.Citation],
+    sources: list[parse.Source],
+    unresolved: set[int],
+) -> list[dict[str, Any]]:
+    """Every reference-list entry with its verification status."""
+    retrieved = {source.normalized for source in sources if source.kind == "web"}
+    numeric_numbers = {
+        citation.number for citation in citations if citation.form == "numeric"
+    }
+    rows: list[dict[str, Any]] = []
+    for citation in citations:
+        if citation.form != "reference" or citation.number is None:
+            continue
+        verified = citation.normalized in retrieved
+        cited_in_body = citation.number in numeric_numbers
+        issue_types: list[str] = []
+        if not verified:
+            issue_types.append("unverified_url")
+        if not cited_in_body:
+            issue_types.append("uncited_reference")
+        rows.append({
+            "number": citation.number,
+            "title": citation.text,
+            "url": citation.url,
+            "domain": urls.domain(citation.url),
+            "verified": verified,
+            "cited_in_body": cited_in_body,
+            "issue_types": issue_types,
+        })
+    for number in sorted(unresolved):
+        rows.append({
+            "number": number,
+            "title": "（参考文献表缺少该条目）",
+            "url": None,
+            "domain": "",
+            "verified": False,
+            "cited_in_body": True,
+            "issue_types": ["unresolved_citation_number"],
+        })
+    rows.sort(key=lambda row: row["number"])
+    return rows
+
+
 def audit(
     report: str,
     sources: list[parse.Source],
@@ -189,6 +233,9 @@ def audit(
     metrics["numeric_citations"] = len(
         [citation for citation in citations if citation.form == "numeric"]
     )
+    metrics["references"] = len(
+        [citation for citation in citations if citation.form == "reference"]
+    )
 
     return {
         "report_available": bool(report.strip()),
@@ -199,4 +246,5 @@ def audit(
         "issue_summary": summary,
         "sources": _public_sources(sources, citations),
         "citations": _public_citations(citations, sections),
+        "references": _public_references(citations, sources, unresolved_numbers),
     }

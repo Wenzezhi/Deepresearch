@@ -30,6 +30,8 @@ export interface QualityMetrics {
   coverage: number;
   source_usage: number;
   inline_citations: number;
+  numeric_citations: number;
+  references: number;
 }
 
 export interface QualityCitation {
@@ -56,6 +58,16 @@ export interface QualitySource {
   number?: number | null;
 }
 
+export interface QualityReference {
+  number: number;
+  title: string;
+  url?: string | null;
+  domain: string;
+  verified: boolean;
+  cited_in_body: boolean;
+  issue_types: string[];
+}
+
 export interface QualityAudit {
   run_id: string;
   topic: string;
@@ -67,6 +79,7 @@ export interface QualityAudit {
   issue_summary: Record<string, number>;
   sources: QualitySource[];
   citations: QualityCitation[];
+  references: QualityReference[];
   generated_at: string;
 }
 

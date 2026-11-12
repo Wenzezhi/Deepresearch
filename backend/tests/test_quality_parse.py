@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import unittest
 
-from quality import checks, parse, urls
+from quality import checks, engine, parse, urls
 
 REPORT = """# 研究报告
 
@@ -190,6 +190,27 @@ class NumberedCitationTests(unittest.TestCase):
         issues = checks.numbered_citation_issues(citations, sources, unresolved)
         uncited = [issue for issue in issues if issue.type == "uncited_reference"]
         self.assertEqual([issue.number for issue in uncited], [2])
+
+    def test_audit_lists_all_references_with_status(self):
+        report = self.REPORT.replace("再压缩[2]。", "再压缩[9]。")
+        sources = parse.merge_sources(parse.parse_sources(report))
+        result = engine.audit(report, sources, [], set())
+        refs = {row["number"]: row for row in result["references"]}
+        self.assertEqual(sorted(refs), [1, 2, 9])
+        self.assertTrue(refs[1]["verified"])
+        self.assertTrue(refs[1]["cited_in_body"])
+        self.assertFalse(refs[2]["cited_in_body"])
+        self.assertIn("unresolved_citation_number", refs[9]["issue_types"])
+        self.assertEqual(result["metrics"]["references"], 2)
+
+    def test_quality_report_contains_reference_table(self):
+        from quality import render
+
+        sources = parse.merge_sources(parse.parse_sources(self.REPORT))
+        result = engine.audit(self.REPORT, sources, [], set())
+        markdown = render.render_quality_report(result, topic="测试")
+        self.assertIn("## 三、参考文献核验", markdown)
+        self.assertIn("| [1] |", markdown)
 
     def test_unresolved_number_is_reported(self):
         report = self.REPORT.replace("再压缩[2]。", "再压缩[9]。")

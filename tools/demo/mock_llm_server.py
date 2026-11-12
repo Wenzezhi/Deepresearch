@@ -94,7 +94,7 @@ def _report(prompt: str) -> str:
         "3. **长视频**：先注入时序再压缩 token 的路线收益最稳，缺少时序编码时"
         "单纯压缩会收益递减[3]。",
         "4. **智能体**：短任务成功率已较高，但长程任务的效率与恢复能力仍是瓶颈[4]；"
-        "另有一条编号在本表中不存在[9]。",
+        "另一项长程评测显示，最佳系统在长任务上的成功率仍低于 25%[9]。",
         "",
         "## 三、风险与局限",
         "",
@@ -119,7 +119,7 @@ def _report(prompt: str) -> str:
         blocks.append(f"[{index}] {title}. {domain}. {url}")
     # 一条"检索结果里没有"的参考文献，用于演示未核验检测
     blocks.append(
-        f"[{len(sources) + 1}] 一份并不存在的补充材料. fabricated.example.org. "
+        f"[{len(sources) + 1}] A Survey of Long-Horizon Computer-Use Agents. arxiv.org. "
         "https://fabricated.example.org/paper"
     )
     blocks.append("")

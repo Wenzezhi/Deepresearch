@@ -114,6 +114,35 @@
           </button>
         </div>
 
+        <div v-else-if="activeTab === 'references'" class="rqg-list">
+          <p v-if="!audit.references.length" class="rqg-empty">
+            报告没有编号参考文献表（或尚未使用 [n] 编号引用）。
+          </p>
+          <button
+            v-for="row in audit.references"
+            :key="row.number"
+            type="button"
+            class="rqg-ref"
+            @click="locateReference(row)"
+          >
+            <span class="rqg-ref-num">[{{ row.number }}]</span>
+            <span class="rqg-ref-body">
+              <strong>{{ row.title }}</strong>
+              <span v-if="row.domain">{{ row.domain }}</span>
+              <em v-if="row.url">{{ row.url }}</em>
+            </span>
+            <span class="rqg-ref-status">
+              <span v-if="row.issue_types.includes('unresolved_citation_number')" class="rqg-chip is-error">缺少条目</span>
+              <span v-else-if="!row.verified" class="rqg-chip is-error">未核验</span>
+              <span v-if="!row.cited_in_body" class="rqg-chip is-warn">正文未引用</span>
+              <span
+                v-if="row.verified && row.cited_in_body && !row.issue_types.length"
+                class="rqg-chip is-ok"
+              >正常</span>
+            </span>
+          </button>
+        </div>
+
         <div v-else-if="activeTab === 'sources'" class="rqg-list">
           <p v-if="!audit.sources.length" class="rqg-empty">本次研究没有记录到来源。</p>
           <button
@@ -192,6 +221,7 @@ import {
   type QualityAudit,
   type QualityCitation,
   type QualityIssue,
+  type QualityReference,
   type QualityReportPayload,
   type QualitySource
 } from "../services/quality";
@@ -204,7 +234,7 @@ const open = ref(false);
 const loading = ref(false);
 const error = ref("");
 const audit = ref<QualityAudit | null>(null);
-const activeTab = ref<"issues" | "sources" | "citations" | "report">("issues");
+const activeTab = ref<"issues" | "references" | "sources" | "citations" | "report">("issues");
 const reportPayload = ref<QualityReportPayload | null>(null);
 const reportLoading = ref(false);
 const reportError = ref("");
@@ -223,6 +253,7 @@ let markerLayer: QualityMarkerLayer | null = null;
 const storageKey = computed(() => `rqg:markers:${props.runId || "none"}`);
 const tabs = computed(() => [
   { id: "issues" as const, label: `问题 ${audit.value?.issues.length || 0}` },
+  { id: "references" as const, label: `参考文献 ${audit.value?.references.length || 0}` },
   { id: "sources" as const, label: `来源 ${audit.value?.sources.length || 0}` },
   { id: "citations" as const, label: `引用位置 ${audit.value?.citations.length || 0}` },
   { id: "report" as const, label: "质检单" }
@@ -346,6 +377,20 @@ function locateCitation(citation: QualityCitation | null) {
     snippet: citation.snippet,
     section: citation.section
   });
+}
+
+/** 参考文献条目：有 URL 时按链接/标题定位，缺少条目时跳到正文里那个编号。 */
+function locateReference(row: QualityReference) {
+  if (row.url) {
+    locate({ url: row.url, quote: row.title, snippet: row.title });
+    return;
+  }
+  const numeric = audit.value?.citations.find(
+    (citation) => citation.form === "numeric" && citation.number === row.number
+  );
+  if (numeric) {
+    locate({ quote: numeric.quote, snippet: numeric.snippet, section: numeric.section });
+  }
 }
 
 async function buildReport() {
@@ -514,6 +559,18 @@ onBeforeUnmount(() => {
 .rqg-issue-body strong { font-size: 12px; color: #1c2b47; }
 .rqg-issue-body span { font-size: 12px; color: #4d5e7d; }
 .rqg-issue-body em { font-style: normal; font-size: 11px; color: #8b9ab5; }
+.rqg-ref { display: flex; gap: 8px; text-align: left; width: 100%; cursor: pointer; border: 1px solid #eef2f9; background: #fff; border-radius: 8px; padding: 7px 9px; align-items: flex-start; }
+.rqg-ref:hover { border-color: #bfd2f2; background: #f8fbff; }
+.rqg-ref-num { color: #2b6cd4; font-weight: 700; font-size: 12px; flex-shrink: 0; width: 34px; }
+.rqg-ref-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.rqg-ref-body strong { font-size: 12px; color: #22314e; overflow-wrap: anywhere; }
+.rqg-ref-body span { font-size: 11px; color: #7a88a4; }
+.rqg-ref-body em { font-style: normal; font-size: 10px; color: #9aa8c0; overflow-wrap: anywhere; }
+.rqg-ref-status { display: flex; flex-direction: column; gap: 3px; align-items: flex-end; flex-shrink: 0; }
+.rqg-chip { font-size: 10px; padding: 1px 6px; border-radius: 10px; white-space: nowrap; }
+.rqg-chip.is-error { background: #fdeaea; color: #c0392b; }
+.rqg-chip.is-warn { background: #fff4dd; color: #a8720a; }
+.rqg-chip.is-ok { background: #e8f7ec; color: #2f7d43; }
 .rqg-source, .rqg-citation {
   display: flex; gap: 8px; text-align: left; width: 100%; cursor: pointer;
   border: 1px solid #eef2f9; background: #fff; border-radius: 8px; padding: 7px 9px;

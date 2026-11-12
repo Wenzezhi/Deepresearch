@@ -84,6 +84,7 @@ def render_quality_report(result: dict[str, Any], topic: str = "", generated_at:
     lines.append(f"| 其中行内引用 | {metrics.get('inline_citations', 0)} |")
     lines.append(f"| 去重后引用 | {metrics.get('cited_unique', 0)} |")
     lines.append(f"| 检索来源数 | {metrics.get('retrieved_unique', 0)} |")
+    lines.append(f"| 参考文献条目 | {metrics.get('references', 0)} |")
     lines.append(f"| 可核验引用 | {metrics.get('verified', 0)} |")
     lines.append(f"| 疑似编造链接 | {metrics.get('unverified', 0)} |")
     lines.append(f"| 未被引用的来源 | {metrics.get('uncited', 0)} |")
@@ -91,7 +92,27 @@ def render_quality_report(result: dict[str, Any], topic: str = "", generated_at:
     lines.append(f"| 无来源章节 | {metrics.get('sections_without_source', 0)} |")
     lines.append("")
 
-    lines.append("## 三、问题清单")
+    references = result.get("references") or []
+    if references:
+        lines.append("## 三、参考文献核验")
+        lines.append("")
+        lines.append("| 编号 | 文献 | 状态 |")
+        lines.append("| --- | --- | --- |")
+        for row in references:
+            statuses: list[str] = []
+            if "unresolved_citation_number" in row.get("issue_types", []):
+                statuses.append("缺少条目")
+            elif not row.get("verified"):
+                statuses.append("未核验/疑似编造")
+            if not row.get("cited_in_body"):
+                statuses.append("正文未引用")
+            lines.append(
+                f"| [{row.get('number')}] | {row.get('title') or ''} | "
+                f"{'；'.join(statuses) or '正常'} |"
+            )
+        lines.append("")
+
+    lines.append("## 四、问题清单")
     lines.append("")
     if not issues:
         lines.append("未发现问题。")
@@ -107,7 +128,7 @@ def render_quality_report(result: dict[str, Any], topic: str = "", generated_at:
                 counter += 1
             lines.append("")
 
-    lines.append("## 四、交付建议")
+    lines.append("## 五、交付建议")
     lines.append("")
     suggestions: list[str] = []
     if metrics.get("unverified", 0):

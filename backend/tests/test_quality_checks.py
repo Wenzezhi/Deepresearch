@@ -209,6 +209,7 @@ class EngineTests(unittest.TestCase):
             "cited_links", "cited_unique", "retrieved_unique", "verified",
             "unverified", "uncited", "coverage", "source_usage",
             "sections", "sections_without_source", "local_refs", "inline_citations",
+            "references",
         ):
             self.assertIn(key, result["metrics"])
         self.assertEqual(result["metrics"]["verified"], 1)
