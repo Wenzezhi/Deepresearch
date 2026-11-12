@@ -52,6 +52,7 @@ class Citation:
     line: int
     form: str  # markdown | bullet | bare | local
     snippet: str = ""  # 该引用所在行的原文片段，用于在正文中定位
+    quote: str = ""  # 该引用所在的可见句子（去掉 markdown 标记），用于句中定位
 
     @property
     def is_local(self) -> bool:
@@ -75,6 +76,36 @@ def _clean_label(label: str) -> str:
     label = label.strip().strip("*_`")
     label = _LOCAL_LABEL.sub("", label)
     return label.strip() or "未命名来源"
+
+
+_SENTENCE_BOUNDARIES = "。！？；!?;"
+
+
+def visible_line(line: str) -> str:
+    """Approximate the text a reader sees after markdown rendering."""
+    visible = _MD_LINK.sub(lambda match: match.group("text"), line)
+    visible = re.sub(r"(\*\*|__|`|\*)", "", visible)
+    return visible
+
+
+def sentence_at(visible: str, needle: str) -> str:
+    """Return the sentence inside ``visible`` that contains ``needle``."""
+    if not needle:
+        return visible.strip()
+    index = visible.find(needle)
+    if index < 0:
+        return visible.strip()
+    left = 0
+    for position in range(index - 1, -1, -1):
+        if visible[position] in _SENTENCE_BOUNDARIES or visible[position] == "\n":
+            left = position + 1
+            break
+    right = len(visible)
+    for position in range(index + len(needle), len(visible)):
+        if visible[position] in _SENTENCE_BOUNDARIES:
+            right = position + 1
+            break
+    return visible[left:right].strip()
 
 
 def source_signature(title: str, url: str) -> str:
@@ -199,35 +230,42 @@ def extract_citations(markdown: str) -> list[Citation]:
             continue
         section = section_titles[-1]
         remainder = line
+        visible = visible_line(line)
 
         for match in _MD_LINK.finditer(line):
             url = match.group("url").strip()
+            label = match.group("text").strip()
             citations.append(
-                Citation(url, urls.normalize(url), match.group("text").strip(),
-                         section, index, "local" if urls.is_local(url) else "markdown")
+                Citation(url, urls.normalize(url), label,
+                         section, index, "local" if urls.is_local(url) else "markdown",
+                         quote=sentence_at(visible, label) if label else url)
             )
         remainder = _MD_LINK.sub(" ", remainder)
 
         bullet = _BULLET_SOURCE.match(remainder)
         if bullet:
             url = bullet.group("url").strip().rstrip(".,;，。；")
+            label = _clean_label(bullet.group("label"))
             citations.append(
-                Citation(url, urls.normalize(url), _clean_label(bullet.group("label")),
-                         section, index, "local" if urls.is_local(url) else "bullet")
+                Citation(url, urls.normalize(url), label,
+                         section, index, "local" if urls.is_local(url) else "bullet",
+                         quote=label or url)
             )
             remainder = remainder.replace(bullet.group("url"), " ")
 
         for match in _BARE_URL.finditer(remainder):
             url = match.group(0).rstrip(".,;，。；")
             citations.append(
-                Citation(url, urls.normalize(url), "", section, index, "bare")
+                Citation(url, urls.normalize(url), "", section, index, "bare",
+                         quote=sentence_at(visible, url) or url)
             )
 
         for match in _LOCAL_REF.finditer(remainder):
             url = match.group(0)
             if not any(c.url == url and c.line == index for c in citations):
                 citations.append(
-                    Citation(url, urls.normalize(url), "", section, index, "local")
+                    Citation(url, urls.normalize(url), "", section, index, "local",
+                             quote=sentence_at(visible, url) or "")
                 )
 
     for citation in citations:

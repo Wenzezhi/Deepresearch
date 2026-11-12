@@ -123,6 +123,7 @@ def _public_citations(
             "section": citation.section,
             "line": citation.line,
             "snippet": citation.snippet,
+            "quote": citation.quote,
             "in_reference": any(
                 start <= citation.line < end for start, end in reference_ranges
             ),

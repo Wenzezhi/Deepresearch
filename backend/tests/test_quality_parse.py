@@ -108,6 +108,25 @@ class CitationParsingTests(unittest.TestCase):
         self.assertIn("https://real.example.com/page", urls_found)
         self.assertNotIn("https://inside-fence.example.com/secret", urls_found)
 
+    def test_quote_is_the_sentence_around_the_citation(self):
+        report = (
+            "# 报告\n\n## 一、背景\n\n"
+            "第一句无关内容。第二句才提到 [关键来源](https://example.com/a)。第三句结尾。\n"
+        )
+        citations = parse.extract_citations(report)
+        self.assertEqual(len(citations), 1)
+        self.assertEqual(citations[0].form, "markdown")
+        self.assertIn("第二句", citations[0].quote)
+        self.assertIn("关键来源", citations[0].quote)
+        self.assertNotIn("第一句", citations[0].quote)
+
+    def test_bare_url_quote_is_the_sentence(self):
+        report = "## 一、结论\n\n实验数据显示提升明显 https://example.com/b 。随后是无关内容。\n"
+        citations = parse.extract_citations(report)
+        bare = [citation for citation in citations if citation.form == "bare"]
+        self.assertTrue(bare)
+        self.assertIn("实验数据", bare[0].quote)
+
 
 class UrlNormalisationTests(unittest.TestCase):
     def test_tracking_and_fragment_removed(self):

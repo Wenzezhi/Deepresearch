@@ -12,6 +12,7 @@ export interface QualityIssue {
   task_id?: number;
   line?: number;
   snippet?: string;
+  quote?: string;
   count?: number;
 }
 
@@ -37,6 +38,7 @@ export interface QualityCitation {
   section: string;
   line: number;
   snippet: string;
+  quote: string;
   in_reference: boolean;
 }
 

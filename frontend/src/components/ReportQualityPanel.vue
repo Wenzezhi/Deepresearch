@@ -88,13 +88,14 @@
             type="button"
             class="rqg-issue"
             :class="`is-${issue.severity}`"
-            @click="locate({ section: issue.section, snippet: issue.snippet })"
+            @click="locate({ url: issue.url, quote: issue.quote, snippet: issue.snippet, section: issue.section })"
           >
             <span class="rqg-sev">{{ SEVERITY_LABELS[issue.severity] }}</span>
             <span class="rqg-issue-body">
               <strong>{{ ISSUE_LABELS[issue.type] || issue.type }}</strong>
               <span>{{ issue.message }}</span>
-              <em v-if="issue.section">位置：{{ issue.section }}<template v-if="issue.line !== undefined"> · 第 {{ issue.line + 1 }} 行</template></em>
+              <em v-if="issue.quote">原文：{{ issue.quote }}</em>
+              <em v-else-if="issue.section">位置：{{ issue.section }}<template v-if="issue.line !== undefined"> · 第 {{ issue.line + 1 }} 行</template></em>
               <em v-else-if="issue.task_id">任务 {{ issue.task_id }}</em>
             </span>
           </button>
@@ -138,10 +139,10 @@
           >
             <span class="rqg-citation-line">{{ citation.line + 1 }}</span>
             <span class="rqg-citation-body">
-              <strong>{{ citation.section || "（无标题段）" }}</strong>
-              <span>{{ citation.snippet || citation.title || citation.url }}</span>
+              <strong>{{ citation.quote || citation.snippet || citation.title || citation.url }}</strong>
+              <span>{{ citation.title || citation.url }}</span>
               <em>
-                {{ citation.form }}
+                {{ citation.section || "（无标题段）" }} · {{ citation.form }}
                 <template v-if="citation.in_reference"> · 参考文献段</template>
                 <template v-else> · 正文行内</template>
               </em>
@@ -305,7 +306,12 @@ function locate(target: MarkerTarget) {
 
 function locateCitation(citation: QualityCitation | null) {
   if (!citation) return;
-  locate({ section: citation.section, snippet: citation.snippet });
+  locate({
+    url: citation.url,
+    quote: citation.quote,
+    snippet: citation.snippet,
+    section: citation.section
+  });
 }
 
 async function buildReport() {
@@ -494,6 +500,18 @@ onBeforeUnmount(() => {
   box-shadow: inset 3px 0 0 #e0a500;
   border-radius: 3px;
 }
+.rqg-focus {
+  background: #ffe066 !important;
+  box-shadow: 0 0 0 2px #eab308;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.rqg-sentence {
+  background: #fff3b0;
+  box-shadow: inset 0 -2px 0 #e0a500;
+  border-radius: 2px;
+}
+.rqg-focus.rqg-flash { animation: rqg-flash 2.4s ease-out; }
 .rqg-flagged.rqg-flash { animation: rqg-flash 2.4s ease-out; }
 @keyframes rqg-flash {
   0% { background: #ffd75e; }

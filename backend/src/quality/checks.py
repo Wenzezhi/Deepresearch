@@ -39,6 +39,7 @@ class Issue:
     task_id: int | None = None
     line: int | None = None
     snippet: str | None = None
+    quote: str | None = None
     count: int | None = None
 
     def public(self) -> dict[str, Any]:
@@ -127,6 +128,7 @@ def citation_issues(
             section=section,
             line=citation.line,
             snippet=_snippet(citation.snippet or citation.text or citation.url),
+            quote=citation.quote or None,
         ))
 
     for key in sorted(stats.retrieved_http - stats.cited_http):
@@ -153,6 +155,7 @@ def citation_issues(
             section=citation.section or None,
             line=citation.line,
             snippet=_snippet(citation.snippet or ""),
+            quote=citation.quote or None,
             count=count,
         ))
 
@@ -241,6 +244,19 @@ def inline_citations(sections: list[Section], citations: list[Citation]) -> list
     return [citation for citation in citations if not _citation_in_reference(citation, sections)]
 
 
+def _representative_sentence(section: Section) -> str:
+    """Pick a claim-bearing sentence so the UI can jump into the section body."""
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", section.body) if part.strip()]
+    if not paragraphs:
+        paragraphs = [section.body.strip()] if section.body.strip() else []
+    if not paragraphs:
+        return ""
+    candidates = [part for part in paragraphs if _CLAIM_PATTERN.search(part)] or paragraphs
+    longest = max(candidates, key=len)
+    first = re.split(r"(?<=[。！？；!?;])", longest)[0].strip()
+    return _snippet(first, 160)
+
+
 def coverage_issues(
     sections: list[Section], citations: list[Citation]
 ) -> tuple[list[Issue], int]:
@@ -284,6 +300,7 @@ def coverage_issues(
                     "但没有任何行内引用，结论无法核验"
                 ),
                 section=section.heading,
+                snippet=_representative_sentence(section) or None,
             ))
     return issues, without
 
