@@ -94,6 +94,12 @@ class StructureCheckTests(unittest.TestCase):
         issues, _empty = checks.structure_issues("   ", [], [])
         self.assertEqual([issue.type for issue in issues], ["empty_report"])
 
+    def test_h1_title_section_is_not_flagged_as_empty(self):
+        report = "# 报告标题\n\n## 一、结论\n\n" + ("结论内容。" * 30) + "\n"
+        _sources, citations, sections = build(report)
+        issues, _empty = checks.structure_issues(report, sections, citations)
+        self.assertNotIn("empty_section", {issue.type for issue in issues})
+
 
 class CoverageCheckTests(unittest.TestCase):
     def test_long_section_without_source(self):
@@ -187,6 +193,7 @@ class EngineTests(unittest.TestCase):
         ):
             self.assertIn(key, result["metrics"])
         self.assertEqual(result["metrics"]["verified"], 1)
+        self.assertEqual(result["metrics"]["retrieved_unique"], 3)
         self.assertEqual(result["metrics"]["uncited"], 2)
         self.assertAlmostEqual(result["metrics"]["coverage"], 1.0)
 

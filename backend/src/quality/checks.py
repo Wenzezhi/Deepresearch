@@ -88,6 +88,7 @@ def citation_issues(
         source.normalized: source for source in sources if source.kind == "web"
     }
     stats.retrieved_http = set(retrieved)
+    stats.retrieved_unique = len(retrieved)
 
     counts: dict[str, int] = {}
     first_seen: dict[str, Citation] = {}
@@ -188,7 +189,7 @@ def structure_issues(report: str, sections: list[Section], citations: list[Citat
 
     empty_count = 0
     for section in headings:
-        if section.is_reference:
+        if section.is_reference or section.level <= 1:
             continue
         if section.body_length < _EMPTY_SECTION_CHARS:
             empty_count += 1
