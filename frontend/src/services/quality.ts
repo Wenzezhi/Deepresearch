@@ -10,6 +10,7 @@ export interface QualityIssue {
   title?: string;
   section?: string;
   task_id?: number;
+  line?: number;
   snippet?: string;
   count?: number;
 }
@@ -26,6 +27,17 @@ export interface QualityMetrics {
   sections_without_source: number;
   coverage: number;
   source_usage: number;
+  inline_citations: number;
+}
+
+export interface QualityCitation {
+  url: string;
+  title: string;
+  form: string;
+  section: string;
+  line: number;
+  snippet: string;
+  in_reference: boolean;
 }
 
 export interface QualitySource {
@@ -49,6 +61,7 @@ export interface QualityAudit {
   issues: QualityIssue[];
   issue_summary: Record<string, number>;
   sources: QualitySource[];
+  citations: QualityCitation[];
   generated_at: string;
 }
 
@@ -92,6 +105,7 @@ export const ISSUE_LABELS: Record<string, string> = {
   empty_reference_section: "参考文献段为空",
   mixed_citation_style: "链接写法不统一",
   unlabelled_link: "链接缺少可读文字",
+  no_inline_citations: "全文无行内引用",
   empty_report: "报告为空"
 };
 

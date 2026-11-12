@@ -11,6 +11,17 @@
     <span class="quality-grade" :class="gradeClass">{{ audit?.grade || "检" }}</span>
     <span>质检</span>
   </button>
+  <button
+    class="note-action quality-mark-toggle"
+    type="button"
+    :class="{ active: markersOn }"
+    :disabled="!runId || !audit"
+    :title="markersOn ? '关闭原文标记（不改动报告内容）' : '在原文中标记问题位置'"
+    @click="toggleMarkers"
+  >
+    <span class="mark-dot" />
+    <span>{{ markersOn ? `标记 ${markedCount}` : "标记" }}</span>
+  </button>
 
   <Teleport to="body">
     <div v-if="open" class="rqg-backdrop" @click.self="closePanel"></div>
@@ -18,15 +29,15 @@
       <header class="rqg-head">
         <div>
           <h3>报告质检</h3>
-          <p class="rqg-sub">检查引用是否可核验、结构是否完整、是否适合交付</p>
+          <p class="rqg-sub">核验引用是否可追溯、结构是否完整、是否适合交付</p>
         </div>
-        <button class="rqg-close" type="button" aria-label="关闭质检面板" @click="closePanel">×</button>
+        <button class="rqg-close" type="button" aria-label="关闭质检面板（保留原文标记）" @click="closePanel">×</button>
       </header>
 
       <div v-if="loading" class="rqg-state">正在读取报告与来源…</div>
       <div v-else-if="error" class="rqg-state rqg-error">
         {{ error }}
-        <button type="button" class="rqg-retry" @click="load">重试</button>
+        <button type="button" class="rqg-retry" @click="load()">重试</button>
       </div>
       <div v-else-if="audit" class="rqg-body">
         <div class="rqg-score">
@@ -46,17 +57,14 @@
 
         <div class="rqg-metrics">
           <div class="rqg-metric"><b>{{ audit.metrics.cited_unique }}</b><span>去重引用</span></div>
-          <div class="rqg-metric"><b>{{ audit.metrics.verified }}</b><span>可核验</span></div>
+          <div class="rqg-metric"><b>{{ audit.metrics.inline_citations }}</b><span>行内引用</span></div>
           <div class="rqg-metric rqg-danger"><b>{{ audit.metrics.unverified }}</b><span>疑似编造</span></div>
           <div class="rqg-metric"><b>{{ audit.metrics.sections_without_source }}</b><span>无来源章节</span></div>
         </div>
 
-        <label class="rqg-toggle">
-          <input v-model="markersOn" type="checkbox" @change="syncMarkers" />
-          <span>在原文中标记问题位置</span>
-          <em v-if="markersOn">{{ markedCount }} 处已标记</em>
-          <em v-else>关闭时不改动原文</em>
-        </label>
+        <p class="rqg-hint">
+          关闭本面板不会清除原文标记；标记由工具栏独立的「标记」按钮控制。
+        </p>
 
         <div class="rqg-tabs" role="tablist">
           <button
@@ -80,13 +88,13 @@
             type="button"
             class="rqg-issue"
             :class="`is-${issue.severity}`"
-            @click="locateIssue(issue)"
+            @click="locate({ section: issue.section, snippet: issue.snippet })"
           >
             <span class="rqg-sev">{{ SEVERITY_LABELS[issue.severity] }}</span>
             <span class="rqg-issue-body">
               <strong>{{ ISSUE_LABELS[issue.type] || issue.type }}</strong>
               <span>{{ issue.message }}</span>
-              <em v-if="issue.section">位置：{{ issue.section }}</em>
+              <em v-if="issue.section">位置：{{ issue.section }}<template v-if="issue.line !== undefined"> · 第 {{ issue.line + 1 }} 行</template></em>
               <em v-else-if="issue.task_id">任务 {{ issue.task_id }}</em>
             </span>
           </button>
@@ -94,7 +102,14 @@
 
         <div v-else-if="activeTab === 'sources'" class="rqg-list">
           <p v-if="!audit.sources.length" class="rqg-empty">本次研究没有记录到来源。</p>
-          <div v-for="source in audit.sources" :key="source.url" class="rqg-source">
+          <button
+            v-for="source in audit.sources"
+            :key="source.url"
+            type="button"
+            class="rqg-source"
+            :disabled="!citationFor(source)"
+            @click="locateCitation(citationFor(source))"
+          >
             <span class="rqg-source-index">{{ source.index }}</span>
             <span class="rqg-source-body">
               <strong>{{ source.title }}</strong>
@@ -104,8 +119,34 @@
                 <template v-if="!source.verified"> · 未在检索结果中</template>
                 <template v-if="source.task_ids.length"> · 任务 {{ source.task_ids.join(",") }}</template>
               </em>
+              <em v-if="citationFor(source)">
+                位置：{{ citationFor(source)?.section }} · 第 {{ (citationFor(source)?.line ?? 0) + 1 }} 行
+                <template v-if="citationFor(source)?.in_reference">（参考文献段）</template>
+              </em>
             </span>
-          </div>
+          </button>
+        </div>
+
+        <div v-else-if="activeTab === 'citations'" class="rqg-list">
+          <p v-if="!audit.citations.length" class="rqg-empty">报告里没有任何链接。</p>
+          <button
+            v-for="(citation, index) in audit.citations"
+            :key="`${citation.line}-${index}`"
+            type="button"
+            class="rqg-citation"
+            @click="locateCitation(citation)"
+          >
+            <span class="rqg-citation-line">{{ citation.line + 1 }}</span>
+            <span class="rqg-citation-body">
+              <strong>{{ citation.section || "（无标题段）" }}</strong>
+              <span>{{ citation.snippet || citation.title || citation.url }}</span>
+              <em>
+                {{ citation.form }}
+                <template v-if="citation.in_reference"> · 参考文献段</template>
+                <template v-else> · 正文行内</template>
+              </em>
+            </span>
+          </button>
         </div>
 
         <div v-else class="rqg-list">
@@ -128,17 +169,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   fetchQualityAudit,
   fetchQualityReport,
   ISSUE_LABELS,
   SEVERITY_LABELS,
   type QualityAudit,
+  type QualityCitation,
   type QualityIssue,
-  type QualityReportPayload
+  type QualityReportPayload,
+  type QualitySource
 } from "../services/quality";
-import { QualityMarkerLayer } from "./QualityMarkerLayer";
+import { QualityMarkerLayer, type MarkerTarget } from "./QualityMarkerLayer";
 
 const props = defineProps<{ runId?: string; report: string }>();
 
@@ -147,7 +190,7 @@ const open = ref(false);
 const loading = ref(false);
 const error = ref("");
 const audit = ref<QualityAudit | null>(null);
-const activeTab = ref<"issues" | "sources" | "report">("issues");
+const activeTab = ref<"issues" | "sources" | "citations" | "report">("issues");
 const reportPayload = ref<QualityReportPayload | null>(null);
 const reportLoading = ref(false);
 const reportError = ref("");
@@ -156,12 +199,13 @@ const markedCount = ref(0);
 
 let markerLayer: QualityMarkerLayer | null = null;
 
+const storageKey = computed(() => `rqg:markers:${props.runId || "none"}`);
 const tabs = computed(() => [
   { id: "issues" as const, label: `问题 ${audit.value?.issues.length || 0}` },
   { id: "sources" as const, label: `来源 ${audit.value?.sources.length || 0}` },
+  { id: "citations" as const, label: `引用位置 ${audit.value?.citations.length || 0}` },
   { id: "report" as const, label: "质检单" }
 ]);
-
 const issueCount = computed(() => audit.value?.issues.length || 0);
 const gradeClass = computed(() => `grade-${audit.value?.grade?.toLowerCase() || "x"}`);
 const summaryText = computed(() => {
@@ -176,9 +220,20 @@ function ensureLayer(): QualityMarkerLayer {
   return markerLayer;
 }
 
-async function load() {
+function citationFor(source: QualitySource): QualityCitation | null {
+  if (!audit.value) return null;
+  return (
+    audit.value.citations.find((citation) => citation.url === source.url) ||
+    audit.value.citations.find(
+      (citation) => citation.title && citation.title === source.title && !citation.in_reference
+    ) ||
+    null
+  );
+}
+
+async function load(quiet = false) {
   if (!props.runId) return;
-  loading.value = true;
+  if (!quiet) loading.value = true;
   error.value = "";
   try {
     const data = await fetchQualityAudit(props.runId);
@@ -190,7 +245,7 @@ async function load() {
   } finally {
     loading.value = false;
     await nextTick();
-    if (markersOn.value) syncMarkers();
+    if (markersOn.value) applyMarkers();
   }
 }
 
@@ -204,10 +259,16 @@ async function togglePanel() {
   if (!audit.value) await load();
 }
 
+/** 关闭面板只关闭面板，原文标记保持（由工具栏「标记」按钮独立控制）。 */
 function closePanel() {
   open.value = false;
-  markersOn.value = false;
-  clearMarkers();
+}
+
+function applyMarkers() {
+  const layer = ensureLayer();
+  layer.refresh(buttonEl.value);
+  if (!audit.value) return;
+  markedCount.value = layer.apply(audit.value.issues);
 }
 
 function clearMarkers() {
@@ -215,27 +276,36 @@ function clearMarkers() {
   markedCount.value = 0;
 }
 
-function syncMarkers() {
+async function toggleMarkers() {
+  markersOn.value = !markersOn.value;
+  try {
+    localStorage.setItem(storageKey.value, markersOn.value ? "1" : "0");
+  } catch {
+    /* 隐私模式忽略 */
+  }
   if (!markersOn.value) {
     clearMarkers();
     return;
   }
-  const layer = ensureLayer();
-  layer.refresh(buttonEl.value);
-  if (!audit.value) return;
-  markedCount.value = layer.apply(audit.value.issues);
+  if (!audit.value) await load(true);
+  await nextTick();
+  applyMarkers();
 }
 
-function locateIssue(issue: QualityIssue) {
+function locate(target: MarkerTarget) {
   const layer = ensureLayer();
   layer.refresh(buttonEl.value);
-  const found = layer.locate(issue);
-  if (!found) {
+  if (!layer.locate(target)) {
     error.value = "没能在原文中定位到该位置，可能报告已更新";
     window.setTimeout(() => {
       error.value = "";
     }, 2500);
   }
+}
+
+function locateCitation(citation: QualityCitation | null) {
+  if (!citation) return;
+  locate({ section: citation.section, snippet: citation.snippet });
 }
 
 async function buildReport() {
@@ -263,11 +333,46 @@ async function copyReport() {
 }
 
 watch(
-  () => props.report,
-  () => {
-    if (markersOn.value) syncMarkers();
+  () => props.runId,
+  async () => {
+    audit.value = null;
+    open.value = false;
+    clearMarkers();
+    markersOn.value = false;
+    try {
+      markersOn.value = localStorage.getItem(storageKey.value) === "1";
+    } catch {
+      markersOn.value = false;
+    }
+    if (markersOn.value) {
+      await load(true);
+      await nextTick();
+      applyMarkers();
+    }
   }
 );
+
+watch(
+  () => props.report,
+  async () => {
+    if (!markersOn.value) return;
+    await nextTick();
+    applyMarkers();
+  }
+);
+
+onMounted(async () => {
+  try {
+    markersOn.value = localStorage.getItem(storageKey.value) === "1";
+  } catch {
+    markersOn.value = false;
+  }
+  if (markersOn.value) {
+    await load(true);
+    await nextTick();
+    applyMarkers();
+  }
+});
 
 onBeforeUnmount(() => {
   clearMarkers();
@@ -277,6 +382,12 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .quality-entry { display: inline-flex; align-items: center; gap: 6px; }
+.quality-mark-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.quality-mark-toggle .mark-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: #cbd6e8;
+}
+.quality-mark-toggle.active { color: #b06a00; }
+.quality-mark-toggle.active .mark-dot { background: #e0a500; box-shadow: 0 0 0 3px #ffe9b3; }
 .quality-grade {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 18px; border-radius: 50%;
@@ -289,7 +400,7 @@ onBeforeUnmount(() => {
 
 .rqg-backdrop { position: fixed; inset: 0; background: #14203a33; z-index: 940; }
 .rqg-panel {
-  position: fixed; top: 0; right: 0; height: 100vh; width: min(460px, 92vw);
+  position: fixed; top: 0; right: 0; height: 100vh; width: min(440px, 92vw);
   background: #fff; box-shadow: -8px 0 32px #18264026; z-index: 950;
   display: flex; flex-direction: column; font-size: 13px; color: #34415a;
 }
@@ -321,20 +432,15 @@ onBeforeUnmount(() => {
 .rqg-grade.grade-a { color: #2f9e44; } .rqg-grade.grade-b { color: #2b6cd4; }
 .rqg-grade.grade-c { color: #c98a00; } .rqg-grade.grade-d { color: #c0392b; }
 .rqg-muted { color: #7a88a4; font-size: 12px; }
-.rqg-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.rqg-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px; }
 .rqg-metric { background: #f5f8ff; border: 1px solid #e4ecfa; border-radius: 8px; padding: 8px 6px; text-align: center; }
 .rqg-metric b { display: block; font-size: 17px; color: #1c2b47; }
 .rqg-metric span { font-size: 11px; color: #6f809e; }
 .rqg-danger b { color: #c0392b; }
-.rqg-toggle {
-  display: flex; align-items: center; gap: 8px; padding: 9px 10px; margin-bottom: 12px;
-  border: 1px dashed #cfdcf2; border-radius: 8px; background: #fbfdff; cursor: pointer;
-}
-.rqg-toggle input { accent-color: #2b6cd4; }
-.rqg-toggle em { margin-left: auto; font-style: normal; font-size: 11px; color: #7a88a4; }
-.rqg-tabs { display: flex; gap: 6px; border-bottom: 1px solid #e8eef8; margin-bottom: 10px; }
+.rqg-hint { margin: 0 0 12px; font-size: 11px; color: #8b9ab5; }
+.rqg-tabs { display: flex; gap: 4px; border-bottom: 1px solid #e8eef8; margin-bottom: 10px; flex-wrap: wrap; }
 .rqg-tabs button {
-  border: 0; background: transparent; padding: 8px 10px; cursor: pointer;
+  border: 0; background: transparent; padding: 8px 8px; cursor: pointer;
   color: #6f809e; border-bottom: 2px solid transparent; font-size: 12px;
 }
 .rqg-tabs button.active { color: #2b6cd4; border-bottom-color: #2b6cd4; font-weight: 600; }
@@ -353,12 +459,21 @@ onBeforeUnmount(() => {
 .rqg-issue-body strong { font-size: 12px; color: #1c2b47; }
 .rqg-issue-body span { font-size: 12px; color: #4d5e7d; }
 .rqg-issue-body em { font-style: normal; font-size: 11px; color: #8b9ab5; }
-.rqg-source { display: flex; gap: 8px; border: 1px solid #eef2f9; border-radius: 8px; padding: 7px 9px; }
+.rqg-source, .rqg-citation {
+  display: flex; gap: 8px; text-align: left; width: 100%; cursor: pointer;
+  border: 1px solid #eef2f9; background: #fff; border-radius: 8px; padding: 7px 9px;
+}
+.rqg-source:hover, .rqg-citation:hover { border-color: #bfd2f2; background: #f8fbff; }
+.rqg-source:disabled { cursor: default; opacity: .75; }
 .rqg-source-index { color: #8b9ab5; font-size: 11px; width: 18px; flex-shrink: 0; }
-.rqg-source-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.rqg-source-body strong { font-size: 12px; color: #22314e; overflow-wrap: anywhere; }
-.rqg-source-body span { font-size: 11px; color: #7a88a4; }
-.rqg-source-body em { font-style: normal; font-size: 11px; color: #8b9ab5; }
+.rqg-source-body, .rqg-citation-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rqg-source-body strong, .rqg-citation-body strong { font-size: 12px; color: #22314e; overflow-wrap: anywhere; }
+.rqg-source-body span, .rqg-citation-body span {
+  font-size: 11px; color: #7a88a4; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.rqg-source-body em, .rqg-citation-body em { font-style: normal; font-size: 11px; color: #8b9ab5; }
+.rqg-citation-line { color: #8b9ab5; font-size: 11px; width: 26px; flex-shrink: 0; }
 .rqg-report-actions { display: flex; gap: 8px; margin-bottom: 8px; }
 .rqg-report-actions button {
   border: 1px solid #cfdcf2; background: #f5f8ff; color: #2b4a7d;
@@ -379,10 +494,9 @@ onBeforeUnmount(() => {
   box-shadow: inset 3px 0 0 #e0a500;
   border-radius: 3px;
 }
-.rqg-flagged[data-rqg-severity="error"] { box-shadow: inset 3px 0 0 #c0392b; }
-.rqg-flagged.rqg-flash { animation: rqg-flash 1.6s ease-out; }
+.rqg-flagged.rqg-flash { animation: rqg-flash 2.4s ease-out; }
 @keyframes rqg-flash {
-  0% { background: #ffe07a; }
+  0% { background: #ffd75e; }
   100% { background: #fff7d6; }
 }
 .rqg-inline-badge {
