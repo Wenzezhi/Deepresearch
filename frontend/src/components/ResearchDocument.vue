@@ -10,6 +10,10 @@
     @chat="emit('chat',$event)"
   >
     <template #actions>
+      <ReportQualityPanel
+        :run-id="runId"
+        :report="report"
+      />
       <ReportExport
         :markdown="report"
         title="研究报告"
@@ -160,6 +164,7 @@ import {computed} from 'vue';
 import MarkdownDocument from './MarkdownDocument.vue';
 
 import ReportExport from './ReportExport.vue';
+import ReportQualityPanel from './ReportQualityPanel.vue';
 
 import {publicAnswer,toolMetadata} from '../services/publicAnswer';
 import type {ChatContext} from './ChatPanel.vue';
