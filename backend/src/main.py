@@ -23,6 +23,8 @@ from document_api import router as document_router
 from research_jobs import ResearchJobs, router as research_router
 from profile_api import router as profile_router, resolve_config
 from export_api import router as export_router
+# 报告质检（独立模块：只读 run 数据，不参与研究流程）
+from quality_api import router as quality_router
 
 # 添加控制台日志处理程序
 logger.add(
@@ -121,6 +123,7 @@ def create_app() -> FastAPI:
                        )
 
     app.include_router(export_router)
+    app.include_router(quality_router(store, app.state.jobs))
 
     from reading_api import router as reading_router
     app.include_router(reading_router(store, app.state.jobs))
